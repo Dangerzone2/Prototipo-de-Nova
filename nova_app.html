@@ -1,0 +1,2725 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOVA – Prevención de Riesgos en Tiempo Real</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<!-- Leaflet.js CDN -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+/* ══════════════════════════════════════
+   TOKENS DE DISEÑO
+   ══════════════════════════════════════ */
+:root {
+  --bg:        #080e1a;
+  --surface:   rgba(14, 22, 40, 0.92);
+  --border:    rgba(255,255,255,0.09);
+  --txt:       #e8f0fe;
+  --muted:     #637394;
+  --safe:      #22c55e;
+  --warn:      #f59e0b;
+  --danger:    #ef4444;
+  --turista:   #06b6d4;     /* cyan – exploración */
+  --taxista:   #f59e0b;     /* ámbar – trabajo */
+  --accent:    var(--turista);
+}
+
+/* ══════════════════════════════════════
+   RESET Y BASE
+   ══════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);overflow:hidden;}
+
+/* ══════════════════════════════════════
+   FONDO ANIMADO – CONSTELACIONES
+   ══════════════════════════════════════ */
+#cosmos{position:fixed;inset:0;z-index:0;overflow:hidden;}
+#cosmos canvas{position:absolute;inset:0;}
+
+/* ══════════════════════════════════════
+   CONTENEDOR PRINCIPAL (simulación móvil)
+   ══════════════════════════════════════ */
+#shell {
+  position:relative;z-index:10;
+  width:390px;height:100%;max-height:100dvh;
+  margin:0 auto;
+  display:flex;flex-direction:column;
+  background:var(--surface);
+  backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);
+  border-left:1px solid var(--border);border-right:1px solid var(--border);
+  overflow:hidden;
+}
+@media(max-width:430px){#shell{width:100%;border:none;}}
+
+/* ══════════════════════════════════════
+   PANTALLAS — sistema de navegación
+   ══════════════════════════════════════ */
+.screen{display:none;flex-direction:column;flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;}
+.screen::-webkit-scrollbar{display:none;}
+.screen.active{display:flex;}
+
+/* ══════════════════════════════════════
+   CABECERA INTERNA
+   ══════════════════════════════════════ */
+.topbar {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 20px 14px;
+  border-bottom:1px solid var(--border);
+  background:rgba(8,14,26,0.6);
+  position:sticky;top:0;z-index:50;flex-shrink:0;
+}
+.topbar-logo{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;letter-spacing:1px;color:var(--accent);}
+.topbar-back{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:4px;}
+.topbar-back:hover{color:var(--txt);}
+.topbar-title{font-size:.9rem;font-weight:600;color:var(--muted);text-align:center;flex:1;}
+.topbar-action{background:none;border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:5px 11px;font-size:.75rem;cursor:pointer;transition:.2s;}
+.topbar-action:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ══════════════════════════════════════
+   COMPONENTES REUTILIZABLES
+   ══════════════════════════════════════ */
+.section-pad{padding:20px;}
+.label{font-size:.7rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);font-weight:600;margin-bottom:6px;}
+
+.field{
+  background:rgba(0,0,0,0.35);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:13px 15px;
+  color:var(--txt);
+  font-family:inherit;font-size:.92rem;
+  outline:none;width:100%;transition:.25s;
+}
+.field:focus{border-color:var(--accent);background:rgba(0,0,0,0.5);}
+.field::placeholder{color:var(--muted);}
+
+.btn{
+  width:100%;padding:14px;border-radius:13px;
+  font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;
+  cursor:pointer;border:none;transition:all .25s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-primary{background:var(--accent);color:#000;}
+.btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px);}
+.btn-outline{background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--border);}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent);}
+.btn-danger{background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.4);}
+.btn-danger:hover{background:rgba(239,68,68,.28);}
+.btn-warn{background:rgba(245,158,11,.15);color:var(--warn);border:1px solid rgba(245,158,11,.4);}
+.btn-warn:hover{background:rgba(245,158,11,.28);}
+.btn-safe{background:rgba(34,197,94,.15);color:var(--safe);border:1px solid rgba(34,197,94,.4);}
+
+.card{
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--border);
+  border-radius:16px;padding:18px;
+  transition:.2s;
+}
+.card:hover{border-color:rgba(255,255,255,.18);}
+
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:5px 11px;border-radius:20px;font-size:.72rem;font-weight:600;
+}
+.badge-safe{background:rgba(34,197,94,.15);color:var(--safe);border:1px solid rgba(34,197,94,.3);}
+.badge-warn{background:rgba(245,158,11,.15);color:var(--warn);border:1px solid rgba(245,158,11,.3);}
+.badge-danger{background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.3);}
+.badge-info{background:rgba(6,182,212,.15);color:var(--turista);border:1px solid rgba(6,182,212,.3);}
+
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.dot-safe{background:var(--safe);box-shadow:0 0 6px var(--safe);}
+.dot-warn{background:var(--warn);box-shadow:0 0 6px var(--warn);}
+.dot-danger{background:var(--danger);box-shadow:0 0 6px var(--danger);}
+
+.divider{height:1px;background:var(--border);margin:20px 0;}
+
+.nav-tabs{
+  display:flex;gap:4px;
+  background:rgba(0,0,0,.3);border-radius:12px;padding:4px;margin-bottom:18px;
+}
+.nav-tab{flex:1;padding:9px;border:none;background:none;color:var(--muted);border-radius:9px;font-size:.8rem;font-weight:600;cursor:pointer;transition:.2s;}
+.nav-tab.active{background:var(--accent);color:#000;}
+
+/* ══════════════════════════════════════
+   BARRA INFERIOR DE NAVEGACIÓN
+   ══════════════════════════════════════ */
+#bottom-nav{
+  display:none;
+  position:sticky;bottom:0;
+  border-top:1px solid var(--border);
+  background:rgba(8,14,26,.95);
+  backdrop-filter:blur(20px);
+  padding:8px 0 env(safe-area-inset-bottom,8px);
+  flex-shrink:0;z-index:50;
+}
+#bottom-nav.visible{display:flex;}
+.bnav-items{display:flex;width:100%;}
+.bnav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  background:none;border:none;color:var(--muted);cursor:pointer;
+  padding:8px 4px;transition:.2s;font-size:.6rem;font-weight:600;
+}
+.bnav-btn:hover,.bnav-btn.active{color:var(--accent);}
+.bnav-icon{font-size:1.3rem;}
+
+/* ══════════════════════════════════════
+   PANTALLA 1: SPLASH
+   ══════════════════════════════════════ */
+#screen-splash{
+  justify-content:center;align-items:center;text-align:center;padding:40px;gap:24px;
+  background:linear-gradient(160deg,rgba(6,182,212,.08) 0%,transparent 60%);
+}
+.splash-logo{
+  font-family:'Syne',sans-serif;font-size:4.5rem;font-weight:800;
+  letter-spacing:3px;
+  background:linear-gradient(135deg,var(--turista),#818cf8);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 4px 12px rgba(6,182,212,.4));
+}
+.splash-tag{font-size:.8rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:-12px;}
+.splash-desc{font-size:.95rem;color:#94a3b8;line-height:1.7;max-width:280px;}
+.splash-actions{width:100%;display:flex;flex-direction:column;gap:10px;}
+
+/* ══════════════════════════════════════
+   PANTALLA 2: REGISTRO (HU01)
+   ══════════════════════════════════════ */
+#screen-register .form-group{margin-bottom:14px;}
+.form-check{display:flex;align-items:flex-start;gap:10px;margin-top:4px;}
+.form-check input[type=checkbox]{width:16px;height:16px;margin-top:2px;accent-color:var(--accent);}
+.form-check label{font-size:.82rem;color:var(--muted);line-height:1.5;}
+.form-check label a{color:var(--accent);}
+.error-msg{font-size:.75rem;color:var(--danger);margin-top:4px;display:none;}
+
+/* ══════════════════════════════════════
+   PANTALLA 3: LOGIN (HU02)
+   ══════════════════════════════════════ */
+#screen-login .profile-selector{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;
+}
+.profile-card{
+  background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:14px;
+  padding:18px 12px;text-align:center;cursor:pointer;transition:.25s;
+}
+.profile-card:hover,.profile-card.selected{border-color:var(--accent);background:rgba(6,182,212,.1);}
+.profile-card.taxista-card{--accent:var(--taxista);}
+.profile-card.taxista-card:hover,.profile-card.taxista-card.selected{border-color:var(--taxista);background:rgba(245,158,11,.1);}
+.profile-icon{font-size:2rem;margin-bottom:8px;}
+.profile-name{font-size:.85rem;font-weight:600;}
+.profile-desc{font-size:.7rem;color:var(--muted);margin-top:3px;}
+.forgot-link{text-align:right;font-size:.78rem;color:var(--accent);cursor:pointer;margin-top:-8px;margin-bottom:4px;}
+
+/* ══════════════════════════════════════
+   PANTALLA 4: RECUPERAR CONTRASEÑA (HU03)
+   ══════════════════════════════════════ */
+.info-box{
+  background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);
+  border-radius:12px;padding:14px;font-size:.82rem;color:#94a3b8;line-height:1.6;
+}
+
+/* ══════════════════════════════════════
+   PANTALLA 5: HOME / DASHBOARD
+   ══════════════════════════════════════ */
+.home-header{padding:22px 20px 16px;}
+.home-greeting{font-size:.85rem;color:var(--muted);}
+.home-name{font-family:'Syne',sans-serif;font-size:1.55rem;font-weight:700;margin-top:2px;}
+.home-profile-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.25);
+  border-radius:20px;padding:4px 12px;font-size:.75rem;color:var(--accent);margin-top:8px;
+}
+
+/* mapa Leaflet styles */
+.heatmap-section{padding:0 20px;}
+.heatmap-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.heatmap-box{
+  border-radius:16px;overflow:hidden;position:relative;
+  border:1px solid var(--border);height:200px;background:#0a1628;
+  cursor:pointer;z-index: 1;
+}
+.heatmap-box:hover{border-color:rgba(6,182,212,.4);}
+.risk-legend{display:flex;gap:12px;margin-top:10px;}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:.7rem;color:var(--muted);}
+
+/* accesos rápidos */
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px 20px;}
+.quick-btn{
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:14px;padding:18px 14px;cursor:pointer;transition:.2s;
+  display:flex;flex-direction:column;gap:8px;
+}
+.quick-btn:hover{border-color:var(--accent);background:rgba(6,182,212,.07);}
+.quick-icon{font-size:1.5rem;}
+.quick-title{font-size:.82rem;font-weight:600;}
+.quick-sub{font-size:.7rem;color:var(--muted);}
+
+/* Alertas Recientes */
+.alert-feed{padding:0 20px 20px;}
+.alert-item{
+  display:flex;gap:12px;align-items:flex-start;padding:14px;
+  background:rgba(255,255,255,.03);border:1px solid var(--border);
+  border-radius:12px;margin-bottom:8px;cursor:pointer;transition:.2s;
+}
+.alert-item:hover{border-color:rgba(255,255,255,.18);}
+.alert-icon{font-size:1.3rem;margin-top:2px;}
+.alert-text{flex:1;}
+.alert-title{font-size:.83rem;font-weight:600;margin-bottom:2px;}
+.alert-meta{font-size:.7rem;color:var(--muted);}
+
+/* ══════════════════════════════════════
+   PANTALLA 6: MAPA DE CALOR (HU05, HU06, HU07)
+   ══════════════════════════════════════ */
+.map-full{
+  flex:1;background:#0a1628;position:relative;overflow:hidden;min-height:340px;z-index: 1;
+}
+.map-filter-bar{padding:14px 20px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;}
+.map-filter-bar::-webkit-scrollbar{display:none;}
+.filter-chip{
+  background:rgba(255,255,255,.06);border:1px solid var(--border);
+  border-radius:20px;padding:7px 14px;white-space:nowrap;
+  font-size:.75rem;font-weight:600;cursor:pointer;transition:.2s;flex-shrink:0;
+}
+.filter-chip:hover,.filter-chip.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.map-info-sheet{padding:20px;}
+.zone-card{
+  display:flex;align-items:center;gap:12px;padding:14px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:12px;margin-bottom:8px;cursor:pointer;transition:.2s;
+}
+.zone-card:hover{border-color:rgba(255,255,255,.18);}
+.zone-risk-bar{width:5px;height:40px;border-radius:3px;}
+
+/* Estilos Personalizados Leaflet */
+.leaflet-container {
+  background-color: #080e1a !important;
+}
+.leaflet-bar a {
+  background-color: rgba(14, 22, 40, 0.9) !important;
+  color: #fff !important;
+  border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+}
+.leaflet-bar a:hover {
+  background-color: rgba(6, 182, 212, 0.2) !important;
+}
+.leaflet-popup-content-wrapper {
+  background: rgba(14, 22, 40, 0.95) !important;
+  color: #fff !important;
+  border: 1px solid var(--border) !important;
+  backdrop-filter: blur(10px);
+}
+.leaflet-popup-tip {
+  background: rgba(14, 22, 40, 0.95) !important;
+}
+
+/* Pulsación Ubicación Usuario */
+.user-marker-pulse {
+  background: #06b6d4;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.8);
+  position: relative;
+}
+.user-marker-pulse::after {
+  content: '';
+  position: absolute;
+  top: -6px; left: -6px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 2px solid #06b6d4;
+  opacity: 0.8;
+  animation: pulse-ring 1.8s infinite;
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* ══════════════════════════════════════
+   PANTALLA 7: RUTA SEGURA (HU08, HU09, HU10)
+   ══════════════════════════════════════ */
+.route-form{padding:20px;display:flex;flex-direction:column;gap:14px;}
+.route-input-group{position:relative;}
+.route-input-group .field{padding-left:42px;}
+.route-dot{
+  position:absolute;left:15px;top:50%;transform:translateY(-50%);
+  width:12px;height:12px;border-radius:50%;pointer-events:none;
+}
+.route-line{
+  width:2px;height:22px;background:var(--border);
+  position:absolute;left:20px;top:100%;margin-top:2px;
+}
+.route-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.route-opt{
+  background:rgba(255,255,255,.04);border:2px solid var(--border);
+  border-radius:14px;padding:12px 8px;text-align:center;cursor:pointer;transition:.25s;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+}
+.route-opt:hover{border-color:var(--accent);}
+.route-opt.selected{border-color:var(--accent);background:rgba(6,182,212,.1);}
+.route-opt-icon{font-size:1.3rem;margin-bottom:4px;}
+.route-opt-name{font-size:.75rem;font-weight:700;}
+.route-opt-time{font-size:.7rem;color:var(--muted);margin-top:2px;}
+.route-opt-risk{font-size:.65rem;margin-top:4px;display:flex;align-items:center;gap:4px;}
+
+/* mapa ruta */
+.route-map{
+  margin:0 20px;border-radius:16px;overflow:hidden;
+  border:1px solid var(--border);background:#0a1628;height:240px;position:relative;z-index: 1;
+}
+
+/* puntos de apoyo */
+.support-list{padding:20px;display:flex;flex-direction:column;gap:8px;}
+.support-item{
+  display:flex;align-items:center;gap:12px;padding:13px 15px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;
+}
+.support-icon{font-size:1.3rem;width:32px;text-align:center;}
+.support-dist{font-size:.7rem;color:var(--muted);}
+.support-name{font-size:.83rem;font-weight:600;}
+
+/* ══════════════════════════════════════
+   PANTALLA 8: ALERTAS (HU11, HU12, HU13)
+   ══════════════════════════════════════ */
+.alert-banner{
+  margin:20px;border-radius:14px;padding:16px;
+  background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);
+  display:flex;gap:12px;align-items:flex-start;
+}
+.alert-banner.warn{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.35);}
+.alert-banner.safe{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);}
+.alert-big-icon{font-size:1.8rem;}
+.alert-info-title{font-size:.9rem;font-weight:700;margin-bottom:4px;}
+.alert-info-body{font-size:.8rem;color:#94a3b8;line-height:1.6;}
+
+.alert-prefs{padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;}
+.pref-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;
+}
+.pref-label{font-size:.85rem;font-weight:500;}
+.pref-sub{font-size:.72rem;color:var(--muted);margin-top:2px;}
+.toggle{
+  position:relative;width:42px;height:24px;flex-shrink:0;
+  background:rgba(255,255,255,.15);border-radius:12px;cursor:pointer;transition:.3s;
+}
+.toggle.on{background:var(--accent);}
+.toggle::after{
+  content:'';position:absolute;top:3px;left:3px;
+  width:18px;height:18px;border-radius:9px;background:#fff;transition:.3s;
+}
+.toggle.on::after{transform:translateX(18px);}
+
+/* ══════════════════════════════════════
+   PANTALLA 9: REPORTES CIUDADANOS (HU14, HU15, HU16)
+   ══════════════════════════════════════ */
+.report-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
+.report-type{
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:12px;padding:14px 8px;text-align:center;cursor:pointer;transition:.2s;
+}
+.report-type:hover,.report-type.selected{border-color:var(--accent);background:rgba(6,182,212,.1);}
+.report-type-icon{font-size:1.4rem;margin-bottom:5px;}
+.report-type-name{font-size:.7rem;font-weight:600;}
+
+.evidence-zone{
+  background:rgba(0,0,0,.3);border:2px dashed var(--border);border-radius:12px;
+  padding:24px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:14px;
+}
+.evidence-zone:hover{border-color:var(--accent);}
+.evidence-icon{font-size:2rem;margin-bottom:8px;}
+.evidence-label{font-size:.8rem;color:var(--muted);}
+
+.nearby-report{
+  display:flex;gap:12px;align-items:flex-start;padding:13px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;
+}
+.report-dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0;}
+.report-detail{font-size:.82rem;font-weight:600;margin-bottom:3px;}
+.report-meta{font-size:.7rem;color:var(--muted);}
+.verified-tag{
+  font-size:.65rem;background:rgba(34,197,94,.15);color:var(--safe);
+  border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:2px 7px;
+  display:inline-block;margin-left:6px;
+}
+
+/* ══════════════════════════════════════
+   PANTALLA 10: SOS (HU17, HU18, HU19)
+   ══════════════════════════════════════ */
+.sos-screen{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:space-around;padding:30px 20px;text-align:center;
+  background:radial-gradient(ellipse at 50% 30%, rgba(239,68,68,.15) 0%, transparent 70%);
+}
+.sos-big-btn{
+  width:180px;height:180px;border-radius:50%;
+  background:rgba(239,68,68,.15);border:3px solid var(--danger);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:.2s;
+  box-shadow:0 0 0 0 rgba(239,68,68,.4);
+  animation:sos-pulse 2.5s infinite;
+  position:relative;
+}
+@keyframes sos-pulse{
+  0%{box-shadow:0 0 0 0 rgba(239,68,68,0.5);}
+  70%{box-shadow:0 0 0 30px rgba(239,68,68,0);}
+  100%{box-shadow:0 0 0 0 rgba(239,68,68,0);}
+}
+.sos-big-btn:hover{background:rgba(239,68,68,.28);transform:scale(1.04);}
+.sos-big-btn.active{background:rgba(239,68,68,.4);animation:none;}
+.sos-btn-icon{font-size:3rem;}
+.sos-btn-label{font-family:'Syne',sans-serif;font-size:.9rem;font-weight:800;color:var(--danger);margin-top:4px;}
+
+.sos-info{max-width:260px;margin:0 auto;}
+.sos-info-title{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:8px;}
+.sos-info-body{font-size:.82rem;color:var(--muted);line-height:1.6;}
+
+.contacts-list{width:100%;display:flex;flex-direction:column;gap:8px;padding:0 10px;}
+.contact-item{
+  display:flex;align-items:center;gap:12px;padding:13px 15px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;
+}
+.contact-avatar{
+  width:38px;height:38px;border-radius:50%;background:rgba(6,182,212,.2);
+  display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;
+}
+.contact-name{font-size:.83rem;font-weight:600;}
+.contact-rel{font-size:.7rem;color:var(--muted);}
+.contact-actions{margin-left:auto;display:flex;gap:6px;}
+.contact-btn{
+  background:none;border:1px solid var(--border);border-radius:8px;
+  padding:5px 9px;color:var(--muted);cursor:pointer;font-size:.7rem;transition:.2s;
+}
+.contact-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ══════════════════════════════════════
+   PANTALLA 11: PERFIL (HU04)
+   ══════════════════════════════════════ */
+.profile-avatar{
+  width:72px;height:72px;border-radius:50%;
+  background:linear-gradient(135deg,var(--turista),#818cf8);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.8rem;font-weight:700;margin:0 auto 12px;
+  border:2px solid rgba(6,182,212,.4);
+}
+.profile-header{padding:24px 20px 16px;text-align:center;border-bottom:1px solid var(--border);}
+.profile-user-name{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:700;}
+.profile-user-email{font-size:.8rem;color:var(--muted);margin-top:3px;}
+.profile-section{padding:16px 20px;border-bottom:1px solid var(--border);}
+.profile-section-title{font-size:.7rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);font-weight:700;margin-bottom:12px;}
+.profile-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05);
+}
+.profile-row:last-child{border-bottom:none;}
+.profile-row-label{font-size:.85rem;font-weight:500;display:flex;align-items:center;gap:8px;}
+.profile-row-val{font-size:.8rem;color:var(--muted);}
+.profile-row-val.editable{color:var(--accent);cursor:pointer;}
+
+/* ══════════════════════════════════════
+   PANTALLA 12: ADMIN / REPORTES (HU20-22)
+   ══════════════════════════════════════ */
+.admin-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;
+}
+.admin-card{
+  background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px;
+  padding:14px;
+}
+.admin-card-val{font-size:1.4rem;font-weight:700;color:var(--accent);margin-top:4px;}
+.admin-chart-bar {
+  display:flex;align-items:center;gap:10px;margin-bottom:8px;
+}
+.admin-bar-fill {
+  height:8px;border-radius:4px;background:var(--accent);
+}
+
+/* ══════════════════════════════════════
+   PANTALLA 13: IA PREDICCIONES (HU26-28)
+   ══════════════════════════════════════ */
+.pred-time-selector {
+  display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;margin-bottom:14px;
+}
+.pred-card {
+  background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px;
+  padding:14px;margin-bottom:10px;
+}
+
+/* ══════════════════════════════════════
+   MODALES
+   ══════════════════════════════════════ */
+#sos-modal{
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(8px);
+  align-items:center;justify-content:center;
+}
+#sos-modal.visible{display:flex;}
+.sos-modal-box{
+  width:320px;background:rgba(14,22,40,.97);border:1px solid rgba(239,68,68,.5);
+  border-radius:20px;padding:30px 24px;text-align:center;
+  box-shadow:0 0 60px rgba(239,68,68,.3);
+}
+.sos-modal-icon{font-size:2.5rem;margin-bottom:14px;animation:blink .8s infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.4;}}
+.sos-modal-title{font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:800;color:var(--danger);margin-bottom:10px;}
+.sos-modal-body{font-size:.85rem;color:#94a3b8;line-height:1.7;margin-bottom:20px;}
+.sos-modal-btn{
+  width:100%;padding:13px;border-radius:12px;border:none;
+  background:rgba(239,68,68,.2);color:var(--danger);
+  font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;cursor:pointer;transition:.2s;
+}
+.sos-modal-btn:hover{background:rgba(239,68,68,.35);}
+
+/* Modal genérico (ej. Add Contact) */
+.modal-overlay {
+  display:none;position:fixed;inset:0;z-index:150;
+  background:rgba(0,0,0,.65);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;
+}
+.modal-overlay.active {display:flex;}
+.modal-box {
+  width:330px;background:#0d1525;border:1px solid var(--border);
+  border-radius:20px;padding:24px;box-shadow:0 10px 40px rgba(0,0,0,0.5);
+}
+
+/* ══════════════════════════════════════
+   TOAST
+   ══════════════════════════════════════ */
+#toast{
+  position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:rgba(14, 22, 40, 0.97);border:1px solid var(--border);
+  border-radius:12px;padding:12px 20px;font-size:.82rem;font-weight:600;
+  z-index:300;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ══════════════════════════════════════
+   ANIMACIONES DE TRANSICIÓN
+   ══════════════════════════════════════ */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+.screen.active{animation:fadeUp .3s ease;}
+
+/* ══════════════════════════════════════
+   UTILIDADES
+   ══════════════════════════════════════ */
+.mt-4{margin-top:4px;}.mt-8{margin-top:8px;}.mt-12{margin-top:12px;}.mt-16{margin-top:16px;}.mt-20{margin-top:20px;}
+.mb-4{margin-bottom:4px;}.mb-8{margin-bottom:8px;}.mb-12{margin-bottom:12px;}.mb-16{margin-bottom:16px;}
+.text-muted{color:var(--muted);}.text-sm{font-size:.8rem;}.text-xs{font-size:.72rem;}
+.fw-600{font-weight:600;}.fw-700{font-weight:700;}
+.flex-center{display:flex;align-items:center;justify-content:center;}
+.flex-between{display:flex;align-items:center;justify-content:space-between;}
+.gap-8{gap:8px;}.gap-12{gap:12px;}
+.w-full{width:100%;}
+.hidden{display:none!important;}
+</style>
+</head>
+<body>
+
+<!-- FONDO ANIMADO -->
+<div id="cosmos"><canvas id="star-canvas"></canvas></div>
+
+<div id="shell">
+
+  <!-- ════════════════ PANTALLA: SPLASH ════════════════ -->
+  <div class="screen active" id="screen-splash">
+    <div class="splash-logo">NOVA</div>
+    <div class="splash-tag">Red de Prevención de Riesgos</div>
+    <div class="splash-desc">Seguridad predictiva en tiempo real para moverse con confianza por Lima Metropolitana.</div>
+    <div class="splash-actions">
+      <button class="btn btn-primary" onclick="initAudio(); go('screen-login')">🔑 Iniciar Sesión</button>
+      <button class="btn btn-outline" onclick="initAudio(); go('screen-register')">📝 Crear Cuenta</button>
+    </div>
+    <div class="text-xs text-muted mt-16" style="text-align:center;">HU01–HU02 · Gestión de Usuarios</div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: REGISTRO (HU01) ════════════════ -->
+  <div class="screen" id="screen-register">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-splash')">←</button>
+      <span class="topbar-title">Crear Cuenta</span>
+      <span></span>
+    </div>
+    <div class="section-pad" style="padding:20px;">
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:20px;line-height:1.6;">
+        <span class="badge badge-info">HU01 · EP01</span><br><br>
+        Ingresa tus datos para acceder a los servicios de seguridad predictiva NOVA.
+      </div>
+      <div class="form-group">
+        <div class="label">Nombre</div>
+        <input class="field" id="reg-nombre" type="text" placeholder="Tu nombre" maxlength="40">
+        <div class="error-msg" id="err-nombre">El nombre es obligatorio</div>
+      </div>
+      <div class="form-group mt-8">
+        <div class="label">Apellidos</div>
+        <input class="field" id="reg-apellidos" type="text" placeholder="Tus apellidos" maxlength="60">
+      </div>
+      <div class="form-group mt-8">
+        <div class="label">Correo Electrónico</div>
+        <input class="field" id="reg-email" type="email" placeholder="correo@ejemplo.com">
+        <div class="error-msg" id="err-email">Ingresa un correo válido</div>
+      </div>
+      <div class="form-group mt-8">
+        <div class="label">Contraseña</div>
+        <input class="field" id="reg-pass" type="password" placeholder="Mínimo 8 caracteres">
+        <div class="error-msg" id="err-pass">Mínimo 8 caracteres requeridos</div>
+      </div>
+      <div class="form-group mt-8">
+        <div class="label">Tipo de Usuario</div>
+        <div class="profile-selector" style="margin-top:8px;">
+          <div class="profile-card" id="sel-turista" onclick="selectProfile('turista')">
+            <div class="profile-icon">🌎</div>
+            <div class="profile-name">Turista</div>
+            <div class="profile-desc">Explorar Lima seguro</div>
+          </div>
+          <div class="profile-card taxista-card" id="sel-taxista" onclick="selectProfile('taxista')">
+            <div class="profile-icon">🚕</div>
+            <div class="profile-name">Taxista</div>
+            <div class="profile-desc">Rutas y operatividad</div>
+          </div>
+        </div>
+        <div class="error-msg" id="err-profile">Selecciona un perfil</div>
+      </div>
+      <div class="form-group mt-8">
+        <div class="form-check">
+          <input type="checkbox" id="reg-terms">
+          <label for="reg-terms">Acepto los <a href="#">Términos y Condiciones</a> y la Política de Privacidad de NOVA. (RN-03)</label>
+        </div>
+        <div class="error-msg" id="err-terms">Debes aceptar los términos</div>
+      </div>
+      <button class="btn btn-primary mt-12" onclick="doRegister()">Registrarme</button>
+      <div class="text-sm text-muted mt-12" style="text-align:center;">
+        ¿Ya tienes cuenta? <span style="color:var(--accent);cursor:pointer;" onclick="go('screen-login')">Inicia sesión</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: LOGIN (HU02) ════════════════ -->
+  <div class="screen" id="screen-login">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-splash')">←</button>
+      <span class="topbar-title">Iniciar Sesión</span>
+      <span></span>
+    </div>
+    <div class="section-pad">
+      <div class="label mt-4 mb-8">Perfil de acceso</div>
+      <div class="profile-selector">
+        <div class="profile-card" id="login-sel-turista" onclick="loginSelectProfile('turista')">
+          <div class="profile-icon">🌎</div>
+          <div class="profile-name">Turista</div>
+          <div class="profile-desc">Explorar Lima</div>
+        </div>
+        <div class="profile-card taxista-card" id="login-sel-taxista" onclick="loginSelectProfile('taxista')">
+          <div class="profile-icon">🚕</div>
+          <div class="profile-name">Taxista</div>
+          <div class="profile-desc">Modo conductor</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="label">Correo Electrónico</div>
+        <input class="field" id="login-email" type="email" placeholder="correo@ejemplo.com">
+      </div>
+      <div class="form-group mt-8">
+        <div class="label">Contraseña</div>
+        <input class="field" id="login-pass" type="password" placeholder="••••••••">
+      </div>
+      <div class="forgot-link mt-8" onclick="go('screen-recover')">¿Olvidaste tu contraseña?</div>
+      <button class="btn btn-primary mt-8" onclick="doLogin()">Ingresar a NOVA</button>
+      <div class="text-sm text-muted mt-12" style="text-align:center;">
+        ¿No tienes cuenta? <span style="color:var(--accent);cursor:pointer;" onclick="go('screen-register')">Regístrate gratis</span>
+      </div>
+      <div class="info-box mt-16">
+        <strong>Regla de seguridad RN-02:</strong> Tras 5 intentos fallidos la cuenta será bloqueada temporalmente.
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: RECUPERAR CONTRASEÑA (HU03) ════════════════ -->
+  <div class="screen" id="screen-recover">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-login')">←</button>
+      <span class="topbar-title">Recuperar Contraseña</span>
+      <span></span>
+    </div>
+    <div class="section-pad">
+      <div class="mb-16">
+        <span class="badge badge-info">HU03 · EP01</span>
+      </div>
+      <div class="info-box mb-16">
+        Ingresa tu correo registrado. Te enviaremos un enlace de recuperación válido por <strong>15 minutos</strong>.
+      </div>
+      <div class="form-group">
+        <div class="label">Correo Electrónico</div>
+        <input class="field" id="rec-email" type="email" placeholder="correo@ejemplo.com">
+      </div>
+      <button class="btn btn-primary mt-8" onclick="doRecover()">Enviar Enlace de Recuperación</button>
+      <div id="rec-success" class="info-box mt-16 hidden" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:var(--safe);">
+        ✓ Enlace enviado. Revisa tu correo y sigue las instrucciones antes de que expire.
+      </div>
+
+      <div class="divider"></div>
+      <div class="label mb-8">Nueva Contraseña</div>
+      <div class="form-group">
+        <input class="field" id="rec-new-pass" type="password" placeholder="Nueva contraseña (mín. 8 caracteres)">
+      </div>
+      <div class="form-group mt-8">
+        <input class="field" id="rec-confirm-pass" type="password" placeholder="Confirmar nueva contraseña">
+      </div>
+      <button class="btn btn-outline mt-8" onclick="doResetPass()">Actualizar Contraseña</button>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: HOME / DASHBOARD ════════════════ -->
+  <div class="screen" id="screen-home">
+    <div class="home-header">
+      <div class="flex-between">
+        <div>
+          <div class="home-greeting" id="home-greeting">Buenos días,</div>
+          <div class="home-name" id="home-name">Usuario</div>
+        </div>
+        <button class="topbar-action" onclick="go('screen-profile')">👤 Perfil</button>
+      </div>
+      <div class="home-profile-badge" id="home-profile-badge">🌎 Turista</div>
+    </div>
+
+    <!-- MAPA DE CALOR RESUMEN REAL (LEAFLET) -->
+    <div class="heatmap-section">
+      <div class="heatmap-label">
+        <span class="label" style="margin:0;">Mapa de Riesgo – Lima</span>
+        <span class="badge badge-warn">Actualizado hace 2 min</span>
+      </div>
+      <!-- Div Contenedor para Leaflet Mini-map -->
+      <div class="heatmap-box" id="home-map"></div>
+      <div class="risk-legend">
+        <div class="legend-item"><span class="dot dot-danger"></span>Alto riesgo</div>
+        <div class="legend-item"><span class="dot dot-warn"></span>Riesgo medio</div>
+        <div class="legend-item"><span class="dot dot-safe"></span>Zona segura</div>
+      </div>
+    </div>
+
+    <!-- ACCESOS RÁPIDOS DINÁMICOS (Diferenciados por perfil Turista/Taxista) -->
+    <div class="quick-grid" id="home-quick-grid">
+      <!-- Se inyecta por JS dinámicamente -->
+    </div>
+
+    <!-- FEED ALERTAS -->
+    <div class="alert-feed">
+      <div class="label mb-12">Alertas recientes en tu zona</div>
+      <div id="home-alert-feed-list">
+        <!-- Dinámico por perfil -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: MAPA COMPLETO (HU05, HU06, HU07) ════════════════ -->
+  <div class="screen" id="screen-mapa">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-home')">←</button>
+      <span class="topbar-title">Mapa de Riesgo</span>
+      <button class="topbar-action" onclick="go('screen-predicciones')">🔮 Predicción</button>
+    </div>
+
+    <!-- FILTROS HORARIO / RIESGO (HU07) -->
+    <div class="map-filter-bar">
+      <div class="filter-chip active" id="chip-todo" onclick="filtrarMapa('todo', this)">🌐 Todos</div>
+      <div class="filter-chip" onclick="filtrarMapa('noche', this)">🌙 Noche</div>
+      <div class="filter-chip" onclick="filtrarMapa('dia', this)">☀️ Día</div>
+      <div class="filter-chip" onclick="filtrarMapa('alto', this)">🔴 Alto Riesgo</div>
+      <div class="filter-chip" onclick="filtrarMapa('bajo', this)">🟢 Seguro</div>
+    </div>
+
+    <!-- MAPA GRANDE REAL (LEAFLET) -->
+    <div class="map-full" id="full-map"></div>
+
+    <!-- BÚSQUEDA POR ZONA (HU06) -->
+    <div class="map-info-sheet">
+      <div class="label mb-8">Consultar zona específica (HU06)</div>
+      <div style="display:flex;gap:8px;">
+        <input class="field" id="zona-buscar" placeholder="Ej: La Victoria, Miraflores, Breña...">
+        <button class="btn btn-primary" style="width:auto;padding:13px 16px;" onclick="buscarZona()">🔍</button>
+      </div>
+      <div id="zona-result" class="hidden mt-12">
+        <div class="card">
+          <div class="flex-between mb-8">
+            <div class="fw-600">Resultado de búsqueda</div>
+            <span class="badge" id="zona-badge">—</span>
+          </div>
+          <div class="text-sm" id="zona-desc" style="color:var(--muted);line-height:1.6;"></div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="label mb-12">Zonas de Lima Monitoreadas</div>
+
+      <div class="zone-card" onclick="centrarEnMapa(-12.075, -77.03)">
+        <div class="zone-risk-bar" style="background:var(--danger);"></div>
+        <div style="flex:1;">
+          <div class="fw-600 text-sm">La Victoria</div>
+          <div class="text-xs text-muted mt-4">Cruce Av. Grau / Av. Aviación · Riesgo Alto</div>
+        </div>
+        <span class="badge badge-danger">Crítico</span>
+      </div>
+      <div class="zone-card" onclick="centrarEnMapa(-12.045, -77.008)">
+        <div class="zone-risk-bar" style="background:var(--danger);"></div>
+        <div style="flex:1;">
+          <div class="fw-600 text-sm">El Agustino</div>
+          <div class="text-xs text-muted mt-4">Cerro El Pino / Av. Riva Agüero · Riesgo Alto</div>
+        </div>
+        <span class="badge badge-danger">Crítico</span>
+      </div>
+      <div class="zone-card" onclick="centrarEnMapa(-12.056, -77.035)">
+        <div class="zone-risk-bar" style="background:var(--warn);"></div>
+        <div style="flex:1;">
+          <div class="fw-600 text-sm">Cercado de Lima</div>
+          <div class="text-xs text-muted mt-4">Plaza de Armas / Av. Tacna · Riesgo Medio</div>
+        </div>
+        <span class="badge badge-warn">Medio</span>
+      </div>
+      <div class="zone-card" onclick="centrarEnMapa(-12.122, -77.029)">
+        <div class="zone-risk-bar" style="background:var(--safe);"></div>
+        <div style="flex:1;">
+          <div class="fw-600 text-sm">Miraflores</div>
+          <div class="text-xs text-muted mt-4">Parque Kennedy / Larcomar · Riesgo Bajo</div>
+        </div>
+        <span class="badge badge-safe">Seguro</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: RUTA SEGURA (HU08, HU09, HU10) ════════════════ -->
+  <div class="screen" id="screen-ruta">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-home')">←</button>
+      <span class="topbar-title">Ruta Segura</span>
+      <span></span>
+    </div>
+
+    <div class="route-form">
+      <div class="badge badge-info mb-8" style="align-self:flex-start;">HU08 · EP03 · Navegación Segura</div>
+      <div>
+        <div class="label">Origen</div>
+        <div class="route-input-group">
+          <span class="route-dot" style="background:var(--safe);"></span>
+          <input class="field" id="ruta-origen" placeholder="¿Dónde estás ahora?" value="Miraflores, Lima">
+        </div>
+      </div>
+      <div class="mt-4">
+        <div class="label">Destino</div>
+        <div class="route-input-group">
+          <span class="route-dot" style="background:var(--danger);"></span>
+          <input class="field" id="ruta-destino" placeholder="¿A dónde vas?" value="Centro de Lima">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="calcularRuta()">Calcular Ruta</button>
+    </div>
+
+    <!-- MAPA RUTA RESULTADO (LEAFLET) -->
+    <div id="ruta-resultado" class="hidden">
+      <!-- Mapa real Leaflet para Rutas -->
+      <div class="route-map" id="route-map-leaflet"></div>
+
+      <!-- COMPARAR RUTAS (4 OPCIONES) (HU09) -->
+      <div style="padding:16px 20px;">
+        <div class="label mb-12">Selecciona una de las 4 opciones de ruta (HU09)</div>
+        <div class="route-options" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+          <!-- 1. Ruta Segura -->
+          <div class="route-opt selected" id="opt-segura" onclick="selectRoute('segura')">
+            <div class="route-opt-icon">🛡️</div>
+            <div class="route-opt-name">Ruta Segura</div>
+            <div class="route-opt-time">+8 min</div>
+            <div class="route-opt-risk"><span class="dot dot-safe"></span> Bajo</div>
+          </div>
+          <!-- 2. Ruta Rápida -->
+          <div class="route-opt" id="opt-rapida" onclick="selectRoute('rapida')">
+            <div class="route-opt-icon">⚡</div>
+            <div class="route-opt-name">Ruta Rápida</div>
+            <div class="route-opt-time">Más corta</div>
+            <div class="route-opt-risk"><span class="dot dot-danger"></span> Alto</div>
+          </div>
+          <!-- 3. Transporte Público -->
+          <div class="route-opt" id="opt-transp" onclick="selectRoute('transp')">
+            <div class="route-opt-icon">🚌</div>
+            <div class="route-opt-name">Transp. Público</div>
+            <div class="route-opt-time">+12 min</div>
+            <div class="route-opt-risk"><span class="dot dot-warn"></span> Medio</div>
+          </div>
+          <!-- 4. Ruta Nocturna -->
+          <div class="route-opt" id="opt-nocturna" onclick="selectRoute('nocturna')">
+            <div class="route-opt-icon">🌙</div>
+            <div class="route-opt-name">Ruta Nocturna</div>
+            <div class="route-opt-time">+15 min</div>
+            <div class="route-opt-risk"><span class="dot dot-safe"></span> Iluminada</div>
+          </div>
+        </div>
+
+        <!-- PUNTOS DE APOYO (HU10) -->
+        <div class="divider"></div>
+        <div class="label mb-12">Puntos de apoyo en la ruta (HU10)</div>
+        <div class="support-list" style="padding:0;">
+          <div class="support-item">
+            <div class="support-icon">🏥</div>
+            <div style="flex:1;">
+              <div class="support-name">Hospital Arzobispo Loayza</div>
+              <div class="support-dist">850 m · Av. Alfonso Ugarte</div>
+            </div>
+            <span class="badge badge-safe">Abierto</span>
+          </div>
+          <div class="support-item">
+            <div class="support-icon">👮</div>
+            <div style="flex:1;">
+              <div class="support-name">Comisaría Cotabambas</div>
+              <div class="support-dist">1.2 km · Cercado de Lima</div>
+            </div>
+            <span class="badge badge-safe">24h</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary mt-16" onclick="iniciarNavegacion()">Iniciar Navegación Segura 🧭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: ALERTAS (HU11, HU12, HU13) ════════════════ -->
+  <div class="screen" id="screen-alertas">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-home')">←</button>
+      <span class="topbar-title">Alertas Inteligentes</span>
+      <span></span>
+    </div>
+
+    <div style="padding:20px 20px 0;">
+      <span class="badge badge-info">HU11-HU13 · EP04</span>
+    </div>
+
+    <!-- ALERTA ACTIVA -->
+    <div class="alert-banner mt-12" id="alert-active-banner">
+      <div class="alert-big-icon">🚨</div>
+      <div style="flex:1;">
+        <div class="alert-info-title">Zona de riesgo a 400 m</div>
+        <div class="alert-info-body">Te estás aproximando a La Victoria (Nivel Alto). Desvío recomendado hacia Av. México.</div>
+      </div>
+    </div>
+
+    <div class="alert-prefs">
+      <div class="label mt-12 mb-4">Preferencias de Alertas (HU12)</div>
+
+      <div class="pref-row">
+        <div>
+          <div class="pref-label">Alerta de proximidad</div>
+          <div class="pref-sub">Notificación por zonas críticas</div>
+        </div>
+        <div class="toggle on" id="pref-preventiva" onclick="togglePref('preventiva')"></div>
+      </div>
+
+      <div class="pref-row">
+        <div>
+          <div class="pref-label">Alertas por Voz (HU13)</div>
+          <div class="pref-sub">Lector de alertas de seguridad</div>
+        </div>
+        <div class="toggle on" id="pref-voz" onclick="togglePref('voz')"></div>
+      </div>
+
+      <div class="pref-row">
+        <div>
+          <div class="pref-label">Vibración de Emergencia (HU13)</div>
+          <div class="pref-sub">Vibrar al ingresar a zona roja</div>
+        </div>
+        <div class="toggle" id="pref-vibra" onclick="togglePref('vibra')"></div>
+      </div>
+
+      <div class="pref-row">
+        <div>
+          <div class="pref-label">Optimización Nocturna</div>
+          <div class="pref-sub">Mayor sensibilidad en la noche</div>
+        </div>
+        <div class="toggle on" id="pref-noche" onclick="togglePref('noche')"></div>
+      </div>
+
+      <div class="divider"></div>
+      <div class="label">Nivel de Sensibilidad</div>
+      <select class="field" id="pref-nivel" onchange="changeNivelSensibilidad()">
+        <option value="Alto">Alto (Alertar por todo)</option>
+        <option value="Medio" selected>Medio (Recomendado)</option>
+        <option value="Bajo">Bajo (Solo emergencias)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: REPORTES CIUDADANOS (HU14, HU15, HU16) ════════════════ -->
+  <div class="screen" id="screen-reportes">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-home')">←</button>
+      <span class="topbar-title">Reportar Incidente</span>
+      <span></span>
+    </div>
+
+    <div class="section-pad">
+      <div class="nav-tabs">
+        <button class="nav-tab active" id="tab-btn-nuevo" onclick="reportTab(this, 'tab-nuevo')">Nuevo Reporte</button>
+        <button class="nav-tab" id="tab-btn-cercanos" onclick="reportTab(this, 'tab-cercanos')">Cercanos</button>
+      </div>
+
+      <!-- TAB: NUEVO REPORTE -->
+      <div id="tab-nuevo">
+        <div class="label mb-8">Tipo de Incidente (HU14)</div>
+        <div class="report-type-grid">
+          <div class="report-type" onclick="selectReportType(this,'Robo')">
+            <div class="report-type-icon">👤</div>
+            <div class="report-type-name">Robo</div>
+          </div>
+          <div class="report-type" onclick="selectReportType(this,'Asalto')">
+            <div class="report-type-icon">⚡</div>
+            <div class="report-type-name">Asalto</div>
+          </div>
+          <div class="report-type" onclick="selectReportType(this,'Bloqueo')">
+            <div class="report-type-icon">🚧</div>
+            <div class="report-type-name">Bloqueo</div>
+          </div>
+          <div class="report-type" onclick="selectReportType(this,'Zona Oscura')">
+            <div class="report-type-icon">🌑</div>
+            <div class="report-type-name">Oscuro</div>
+          </div>
+          <div class="report-type" onclick="selectReportType(this,'Accidente')">
+            <div class="report-type-icon">💥</div>
+            <div class="report-type-name">Accidente</div>
+          </div>
+          <div class="report-type" onclick="selectReportType(this,'Otro')">
+            <div class="report-type-icon">📌</div>
+            <div class="report-type-name">Otro</div>
+          </div>
+        </div>
+
+        <div class="label mb-8">Descripción</div>
+        <textarea class="field" id="rep-desc" rows="2" placeholder="Describe brevemente el incidente..." style="resize:none;"></textarea>
+
+        <div class="label mt-8 mb-4">Ubicación</div>
+        <input class="field" id="rep-loc" placeholder="Ubicación aproximada" value="📍 Miraflores, Lima">
+
+        <!-- ADJUNTAR EVIDENCIA (HU15) -->
+        <div class="label mt-8 mb-4">Evidencia fotográfica (HU15)</div>
+        <div class="evidence-zone" id="evidence-upload-zone" onclick="triggerEvidenceUpload()">
+          <div class="evidence-icon">📷</div>
+          <div class="evidence-label" id="evidence-status-label">Toca para adjuntar foto o video</div>
+          <div class="text-xs text-muted mt-4">JPG, PNG · máx. 10 MB</div>
+        </div>
+
+        <button class="btn btn-primary" onclick="enviarReporte()">Enviar Reporte ➜</button>
+      </div>
+
+      <!-- TAB: REPORTES CERCANOS (HU16 - PERSISTENTE) -->
+      <div id="tab-cercanos" class="hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <span class="badge badge-info">HU16 · Reportes Ciudadanos Recientes</span>
+        </div>
+        <div id="nearby-reports-container">
+          <!-- Dinámico de localStorage -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: SOS (HU17, HU18, HU19) ════════════════ -->
+  <div class="screen" id="screen-sos">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-home')">←</button>
+      <span class="topbar-title">Emergencia SOS</span>
+      <span></span>
+    </div>
+
+    <div class="sos-screen">
+      <div class="sos-info">
+        <div class="sos-info-title">¿Estás en peligro?</div>
+        <div class="sos-info-body">Presiona el botón SOS para alertar al Centro de Control NOVA, Serenazgo y enviar coordenadas GPS a las autoridades. (HU17-18)</div>
+      </div>
+
+      <div class="sos-big-btn" id="sos-main-btn" onclick="activarSOS()">
+        <div class="sos-btn-icon">🆘</div>
+        <div class="sos-btn-label">SOS</div>
+      </div>
+
+      <!-- CONTACTOS DE EMERGENCIA (HU19) -->
+      <div class="w-full">
+        <div class="flex-between mb-8" style="padding: 0 10px;">
+          <div class="label" style="margin:0;">Contactos de emergencia (HU19)</div>
+          <span style="color:var(--accent); font-size: .8rem; cursor:pointer;" onclick="openAddContactModal()">➕ Añadir</span>
+        </div>
+        <div class="contacts-list" id="contacts-container">
+          <!-- Renderizado dinámico -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: PERFIL (HU04) ════════════════ -->
+  <div class="screen" id="screen-profile">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-home')">←</button>
+      <span class="topbar-title">Mi Perfil</span>
+      <button class="topbar-action" onclick="guardarPerfil()">Guardar</button>
+    </div>
+
+    <div class="profile-header">
+      <div class="profile-avatar" id="profile-avatar-letter">U</div>
+      <div class="profile-user-name" id="profile-display-name">Usuario NOVA</div>
+      <div class="profile-user-email" id="profile-display-email">usuario@nova.pe</div>
+      <div class="home-profile-badge" id="profile-badge" style="margin:10px auto 0;width:fit-content;">🌎 Turista</div>
+    </div>
+
+    <div class="profile-section">
+      <div class="profile-section-title">Datos personales (HU04 · EP01)</div>
+      <div class="profile-row">
+        <span class="profile-row-label">👤 Nombre</span>
+        <span class="profile-row-val editable" id="pf-nombre" contenteditable="true">—</span>
+      </div>
+      <div class="profile-row">
+        <span class="profile-row-label">✉️ Correo</span>
+        <span class="profile-row-val editable" id="pf-email" contenteditable="true">—</span>
+      </div>
+      <div class="profile-row">
+        <span class="profile-row-label">📱 Teléfono</span>
+        <span class="profile-row-val editable" id="pf-telefono" contenteditable="true">+51 999 000 000</span>
+      </div>
+    </div>
+
+    <div class="profile-section" id="profile-admin-entry">
+      <div class="profile-section-title">Administración y Sistemas</div>
+      <div class="profile-row" onclick="go('screen-admin')" style="cursor:pointer;">
+        <span class="profile-row-label">📊 Panel Institucional (Admin)</span>
+        <span class="profile-row-val editable">Ver Panel →</span>
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <div class="profile-section-title">Seguridad y acceso</div>
+      <div class="profile-row" onclick="go('screen-recover')">
+        <span class="profile-row-label">🔑 Cambiar contraseña</span>
+        <span class="profile-row-val editable">→</span>
+      </div>
+    </div>
+
+    <div class="section-pad">
+      <button class="btn btn-danger" onclick="cerrarSesion()">Cerrar Sesión</button>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: ADMIN / PANEL INSTITUCIONAL (HU20-22) ════════════════ -->
+  <div class="screen" id="screen-admin">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-profile')">←</button>
+      <span class="topbar-title">Panel Admin (HU20)</span>
+      <span></span>
+    </div>
+
+    <div class="section-pad">
+      <div class="badge badge-safe mb-12">Conexión Segura con Municipalidades</div>
+      
+      <div class="admin-grid">
+        <div class="admin-card">
+          <div class="label" style="font-size:.6rem;">Reportes Totales</div>
+          <div class="admin-card-val" id="admin-total-reports">38</div>
+        </div>
+        <div class="admin-card">
+          <div class="label" style="font-size:.6rem;">Usuarios Activos</div>
+          <div class="admin-card-val">124</div>
+        </div>
+        <div class="admin-card">
+          <div class="label" style="font-size:.6rem;">Alertas Enviadas</div>
+          <div class="admin-card-val">529</div>
+        </div>
+        <div class="admin-card">
+          <div class="label" style="font-size:.6rem;">Sincronización (HU23)</div>
+          <div class="admin-card-val" style="color:var(--safe); font-size:1.1rem;">✓ 100% Ok</div>
+        </div>
+      </div>
+
+      <!-- GRAFICO RAPIDO -->
+      <div class="label mb-8">Incidencias por Distrito (HU21)</div>
+      <div class="card mb-16">
+        <div class="admin-chart-bar">
+          <div class="text-xs" style="width:70px;">La Victoria</div>
+          <div class="admin-bar-fill" style="width: 50%; background:var(--danger);"></div>
+          <div class="text-xs">15</div>
+        </div>
+        <div class="admin-chart-bar">
+          <div class="text-xs" style="width:70px;">El Agustino</div>
+          <div class="admin-bar-fill" style="width: 40%; background:var(--danger);"></div>
+          <div class="text-xs">12</div>
+        </div>
+        <div class="admin-chart-bar">
+          <div class="text-xs" style="width:70px;">Cercado</div>
+          <div class="admin-bar-fill" style="width: 25%; background:var(--warn);"></div>
+          <div class="text-xs">8</div>
+        </div>
+        <div class="admin-chart-bar">
+          <div class="text-xs" style="width:70px;">Breña</div>
+          <div class="admin-bar-fill" style="width: 15%; background:var(--warn);"></div>
+          <div class="text-xs">3</div>
+        </div>
+      </div>
+
+      <!-- MODERACION DE REPORTES (HU22) -->
+      <div class="label mb-8">Verificación de Reportes (HU22)</div>
+      <div id="admin-reports-verification-list">
+        <!-- Dinámico -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ PANTALLA: PREDICCIONES IA (HU26-28) ════════════════ -->
+  <div class="screen" id="screen-predicciones">
+    <div class="topbar">
+      <button class="topbar-back" onclick="go('screen-mapa')">←</button>
+      <span class="topbar-title">Predicciones IA (HU26)</span>
+      <span></span>
+    </div>
+
+    <div class="section-pad">
+      <div class="badge badge-info mb-12">Modelo Predictivo Red-NOVA v2.5</div>
+      <div class="label mb-8">Selecciona un horario:</div>
+      <div class="pred-time-selector">
+        <button class="nav-tab active" id="pred-tab-morning" onclick="changePredTime('morning', this)">🌅 Mañana</button>
+        <button class="nav-tab" id="pred-tab-afternoon" onclick="changePredTime('afternoon', this)">☀️ Tarde</button>
+        <button class="nav-tab" id="pred-tab-night" onclick="changePredTime('night', this)">🌙 Noche</button>
+      </div>
+
+      <div id="predictions-results-container">
+        <!-- Se inyecta dinámicamente por JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- BARRA DE NAVEGACIÓN INFERIOR -->
+  <div id="bottom-nav">
+    <div class="bnav-items">
+      <button class="bnav-btn active" id="bnav-home" onclick="bnav('screen-home','bnav-home')">
+        <span class="bnav-icon">🏠</span>Inicio
+      </button>
+      <button class="bnav-btn" id="bnav-mapa" onclick="bnav('screen-mapa','bnav-mapa')">
+        <span class="bnav-icon">🗺️</span>Mapa
+      </button>
+      <button class="bnav-btn" id="bnav-ruta" onclick="bnav('screen-ruta','bnav-ruta')">
+        <span class="bnav-icon">🛣️</span>Ruta
+      </button>
+      <button class="bnav-btn" id="bnav-reportes" onclick="bnav('screen-reportes','bnav-reportes')">
+        <span class="bnav-icon">📍</span>Reportar
+      </button>
+      <button class="bnav-btn" id="bnav-sos" onclick="bnav('screen-sos','bnav-sos')">
+        <span class="bnav-icon">🆘</span>SOS
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SOS -->
+<div id="sos-modal">
+  <div class="sos-modal-box">
+    <div class="sos-modal-icon">🚨</div>
+    <div class="sos-modal-title">ALERTA SOS ENVIADA</div>
+    <div class="sos-modal-body">
+      Tu ubicación GPS ha sido compartida con el Centro de Control de Emergencias NOVA.<br><br>
+      <strong>La policía (PNP) y Serenazgo del cuadrante han sido despachados.</strong><br><br>
+      Tus contactos de emergencia han recibido tu ubicación por SMS.
+    </div>
+    <button class="sos-modal-btn" onclick="cerrarSOSModal()">Entendido — Estoy a salvo</button>
+  </div>
+</div>
+
+<!-- MODAL AGREGAR CONTACTO -->
+<div class="modal-overlay" id="add-contact-modal">
+  <div class="modal-box">
+    <div class="label mb-12" style="font-size:.9rem;">Agregar Contacto de Emergencia</div>
+    <div class="form-group mb-8">
+      <div class="label">Nombre completo</div>
+      <input class="field" id="contact-new-name" placeholder="Nombre">
+    </div>
+    <div class="form-group mb-8">
+      <div class="label">Relación</div>
+      <select class="field" id="contact-new-rel">
+        <option value="Familiar">Familiar</option>
+        <option value="Pareja">Pareja</option>
+        <option value="Amigo">Amigo/a</option>
+        <option value="Colega">Colega</option>
+      </select>
+    </div>
+    <div class="form-group mb-12">
+      <div class="label">Teléfono móvil</div>
+      <input class="field" id="contact-new-phone" type="tel" placeholder="+51 900 000 000">
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-outline" style="flex:1; padding: 10px;" onclick="closeAddContactModal()">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1; padding: 10px;" onclick="saveNewContact()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- Leaflet.js script -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+/* ════════════════════════════════
+   Efectos de Sonido (Web Audio API)
+   ════════════════════════════════ */
+const NovaSound = {
+  ctx: null,
+  init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+  },
+  playAlert() {
+    this.init();
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+    gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.25);
+  },
+  playSOS() {
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    for(let i=0; i<5; i++) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(i % 2 === 0 ? 880 : 660, now + i * 0.3);
+      gain.gain.setValueAtTime(0.2, now + i * 0.3);
+      osc.start(now + i * 0.3);
+      osc.stop(now + (i + 0.3));
+    }
+  },
+  playSuccess() {
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+      gain.gain.setValueAtTime(0.1, now + idx * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.2);
+      osc.start(now + idx * 0.08);
+      osc.stop(now + idx * 0.08 + 0.2);
+    });
+  },
+  playNotification() {
+    this.init();
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.frequency.setValueAtTime(880, this.ctx.currentTime);
+    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.15);
+  },
+  playDanger() {
+    this.init();
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+    gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.6);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.6);
+  }
+};
+
+function initAudio() {
+  NovaSound.init();
+}
+
+/* ════════════════════════════════
+   Alertas por Voz (HU13 - SpeechSynthesis)
+   ════════════════════════════════ */
+const NovaVoice = {
+  speak(texto) {
+    const prefs = DB.getPrefs();
+    if (!prefs.voz) return;
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(texto);
+      utterance.lang = 'es-PE';
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  }
+};
+
+/* ════════════════════════════════
+   Persistencia LocalStorage (DB)
+   ════════════════════════════════ */
+const DB = {
+  getUsers() {
+    return JSON.parse(localStorage.getItem('nova_users') || '[]');
+  },
+  saveUser(user) {
+    const users = this.getUsers();
+    users.push(user);
+    localStorage.setItem('nova_users', JSON.stringify(users));
+  },
+  getSession() {
+    return JSON.parse(localStorage.getItem('nova_session') || 'null');
+  },
+  saveSession(session) {
+    localStorage.setItem('nova_session', JSON.stringify(session));
+  },
+  clearSession() {
+    localStorage.removeItem('nova_session');
+  },
+  getReports() {
+    const stored = localStorage.getItem('nova_reports');
+    if (!stored) {
+      const defaultReports = [
+        { id: 1, type: 'Robo', desc: 'Asalto con arma blanca a transeúnte', loc: 'Av. Grau 1250, La Victoria', time: 'Hace 12 min', status: 'verificado' },
+        { id: 2, type: 'Asalto', desc: 'Robo de accesorios de autopartes', loc: 'Av. Riva Agüero, El Agustino', time: 'Hace 28 min', status: 'verificado' },
+        { id: 3, type: 'Bloqueo', desc: 'Accidente de tránsito obstaculiza vía', loc: 'Jr. Huánuco, Cercado', time: 'Hace 1h', status: 'pendiente' },
+        { id: 4, type: 'Zona Oscura', desc: 'Alumbrado público inoperativo por varias cuadras', loc: 'Jr. Lorente, Breña', time: 'Hace 2h', status: 'verificado' }
+      ];
+      localStorage.setItem('nova_reports', JSON.stringify(defaultReports));
+      return defaultReports;
+    }
+    return JSON.parse(stored);
+  },
+  saveReport(report) {
+    const reports = this.getReports();
+    reports.unshift(report);
+    localStorage.setItem('nova_reports', JSON.stringify(reports));
+  },
+  updateReportStatus(reportId, newStatus) {
+    const reports = this.getReports();
+    const rep = reports.find(r => r.id === reportId);
+    if(rep) {
+      rep.status = newStatus;
+      localStorage.setItem('nova_reports', JSON.stringify(reports));
+    }
+  },
+  getContacts() {
+    const stored = localStorage.getItem('nova_contacts');
+    if (!stored) {
+      const defaultContacts = [
+        { id: 1, name: 'Marco Calisaya (Papá)', rel: 'Familiar', phone: '+51 987 654 321' },
+        { id: 2, name: 'Lucía Flores (Esposa)', rel: 'Pareja', phone: '+51 912 345 678' }
+      ];
+      localStorage.setItem('nova_contacts', JSON.stringify(defaultContacts));
+      return defaultContacts;
+    }
+    return JSON.parse(stored);
+  },
+  saveContacts(contacts) {
+    localStorage.setItem('nova_contacts', JSON.stringify(contacts));
+  },
+  getPrefs() {
+    const stored = localStorage.getItem('nova_prefs');
+    if(!stored) {
+      const defaults = { preventiva: true, voz: true, vibra: false, noche: true, nivel: 'Medio' };
+      localStorage.setItem('nova_prefs', JSON.stringify(defaults));
+      return defaults;
+    }
+    return JSON.parse(stored);
+  },
+  savePrefs(prefs) {
+    localStorage.setItem('nova_prefs', JSON.stringify(prefs));
+  }
+};
+
+/* ════════════════════════════════
+   ESTADO GLOBAL DE LA APLICACIÓN
+   ════════════════════════════════ */
+let currentScreen = 'screen-splash';
+let currentUser = null; // Guardará el objeto de sesión actual
+let registerProfile = '';
+let loginProfile = '';
+
+// Variables de Mapas Leaflet
+let homeMapObj = null;
+let fullMapObj = null;
+let routeMapObj = null;
+
+// Capas de Leaflet para filtros
+let fullMapRiskCircles = [];
+let fullMapIncidentMarkers = [];
+
+// Zonas críticas de Lima (Datos geográficos)
+const LIMA_ZONES = [
+  { name: 'La Victoria', lat: -12.075, lng: -77.03, radius: 450, risk: 'alto', info: 'Av. Grau / Av. Aviación' },
+  { name: 'El Agustino', lat: -12.045, lng: -77.008, radius: 400, risk: 'alto', info: 'Av. Riva Agüero' },
+  { name: 'Cercado de Lima', lat: -12.056, lng: -77.035, radius: 350, risk: 'medio', info: 'Av. Tacna / Jr. Huánuco' },
+  { name: 'Breña', lat: -12.064, lng: -77.052, radius: 300, risk: 'medio', info: 'Cercano a Av. Arica' },
+  { name: 'Miraflores', lat: -12.122, lng: -77.029, radius: 400, risk: 'bajo', info: 'Parque Kennedy' },
+  { name: 'Surco', lat: -12.145, lng: -77.012, radius: 380, risk: 'bajo', info: 'Av. Benavides' }
+];
+
+/* ════════════════════════════════
+   AUTO-RESTAURAR SESIÓN AL CARGAR
+   ════════════════════════════════ */
+window.addEventListener('load', () => {
+  const session = DB.getSession();
+  if (session) {
+    currentUser = session;
+    document.documentElement.style.setProperty('--accent', currentUser.profile === 'taxista' ? 'var(--taxista)' : 'var(--turista)');
+    enterApp();
+  } else {
+    go('screen-splash');
+  }
+  syncPrefToggles();
+});
+
+/* ════════════════════════════════
+   SISTEMA DE CONSTELACIONES
+   ════════════════════════════════ */
+(function(){
+  const canvas = document.getElementById('star-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, stars = [];
+  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+  function initStars(){
+    stars=[];
+    for(let i=0;i<120;i++) stars.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.2+.3,s:Math.random()*.6+.2,a:Math.random()*Math.PI*2});
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    stars.forEach(s=>{
+      s.a+=.01*s.s;
+      const op=.3+.4*Math.sin(s.a);
+      ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(99,147,230,${op})`;ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize',()=>{resize();initStars();});
+  resize();initStars();draw();
+})();
+
+/* ════════════════════════════════
+   NAVEGACIÓN INTERNA
+   ════════════════════════════════ */
+const MAIN_SCREENS = ['screen-home','screen-mapa','screen-ruta','screen-reportes','screen-sos','screen-profile','screen-admin','screen-predicciones'];
+
+function go(screenId){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(screenId).classList.add('active');
+  currentScreen = screenId;
+  const nav = document.getElementById('bottom-nav');
+  if(MAIN_SCREENS.includes(screenId) && screenId !== 'screen-admin' && screenId !== 'screen-predicciones'){
+    nav.classList.add('visible');
+  } else {
+    nav.classList.remove('visible');
+  }
+  
+  // Sync bottom nav active icon
+  document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));
+  const map = {'screen-home':'bnav-home','screen-mapa':'bnav-mapa','screen-ruta':'bnav-ruta','screen-reportes':'bnav-reportes','screen-sos':'bnav-sos'};
+  if(map[screenId]) document.getElementById(map[screenId]).classList.add('active');
+
+  // Inicializar mapas Leaflet de forma diferida (lazy loading)
+  setTimeout(() => {
+    initScreenMaps(screenId);
+  }, 100);
+}
+
+function bnav(screenId, btnId){
+  go(screenId);
+}
+
+/* Inicialización diferida de Mapas Leaflet */
+function initScreenMaps(screenId) {
+  if (screenId === 'screen-home') {
+    if (!homeMapObj) {
+      homeMapObj = L.map('home-map', {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([-12.08, -77.03], 12);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(homeMapObj);
+      
+      // Dibujar círculos de riesgo
+      LIMA_ZONES.forEach(z => {
+        const color = z.risk === 'alto' ? '#ef4444' : z.risk === 'medio' ? '#f59e0b' : '#22c55e';
+        L.circle([z.lat, z.lng], {
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.22,
+          radius: z.radius
+        }).addTo(homeMapObj);
+      });
+
+      // Ubicación del usuario ficticia (Miraflores/San Isidro)
+      const userMarker = L.divIcon({
+        className: 'user-marker-container',
+        html: '<div class="user-marker-pulse"></div>',
+        iconSize: [20, 20]
+      });
+      L.marker([-12.122, -77.029], { icon: userMarker }).addTo(homeMapObj);
+    } else {
+      homeMapObj.invalidateSize();
+    }
+  }
+
+  if (screenId === 'screen-mapa') {
+    if (!fullMapObj) {
+      fullMapObj = L.map('full-map', {
+        zoomControl: true,
+        attributionControl: false
+      }).setView([-12.08, -77.03], 12);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(fullMapObj);
+      
+      // Renderizar zonas críticas interactivos
+      LIMA_ZONES.forEach(z => {
+        const color = z.risk === 'alto' ? '#ef4444' : z.risk === 'medio' ? '#f59e0b' : '#22c55e';
+        const circle = L.circle([z.lat, z.lng], {
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.3,
+          radius: z.radius
+        }).addTo(fullMapObj);
+        
+        circle.bindPopup(`<b>Distrito: ${z.name}</b><br>Zona: ${z.info}<br>Riesgo: <span style="color:${color}; font-weight:bold;">${z.risk.toUpperCase()}</span>`);
+        
+        // Guardamos referencias para filtrar
+        fullMapRiskCircles.push({ circle, risk: z.risk, hour: z.name === 'La Victoria' || z.name === 'El Agustino' ? 'noche' : 'dia' });
+      });
+
+      // Marcador de ubicación usuario
+      const userMarker = L.divIcon({
+        className: 'user-marker-container',
+        html: '<div class="user-marker-pulse"></div>',
+        iconSize: [20, 20]
+      });
+      L.marker([-12.122, -77.029], { icon: userMarker }).addTo(fullMapObj).bindPopup("<b>Tú estás aquí</b>");
+
+      // Cargar reportes activos de localStorage
+      renderMapIncidentMarkers();
+    } else {
+      fullMapObj.invalidateSize();
+    }
+  }
+
+  if (screenId === 'screen-ruta') {
+    if (!routeMapObj) {
+      routeMapObj = L.map('route-map-leaflet', {
+        zoomControl: false,
+        attributionControl: false
+      }).setView([-12.09, -77.03], 12);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(routeMapObj);
+    } else {
+      routeMapObj.invalidateSize();
+    }
+  }
+}
+
+// Cargar marcadores de incidentes al mapa completo
+function renderMapIncidentMarkers() {
+  if (!fullMapObj) return;
+  // Limpiar previos
+  fullMapIncidentMarkers.forEach(m => fullMapObj.removeLayer(m));
+  fullMapIncidentMarkers = [];
+
+  const reports = DB.getReports();
+  reports.forEach(r => {
+    // Generar coordenadas relativas basadas en el distrito para simular geolocalización
+    let lat = -12.08, lng = -77.03;
+    if (r.loc.includes('Victoria')) { lat = -12.074; lng = -77.025; }
+    else if (r.loc.includes('Agustino')) { lat = -12.043; lng = -77.010; }
+    else if (r.loc.includes('Cercado') || r.loc.includes('Centro')) { lat = -12.054; lng = -77.039; }
+    else { lat = -12.10 + (Math.random() * 0.04); lng = -77.02 - (Math.random() * 0.02); }
+
+    const markerColor = r.type === 'Robo' || r.type === 'Asalto' ? '#ef4444' : '#f59e0b';
+    const incidentMarker = L.circleMarker([lat, lng], {
+      color: '#ffffff',
+      fillColor: markerColor,
+      fillOpacity: 0.9,
+      radius: 8,
+      weight: 1.5
+    }).addTo(fullMapObj);
+
+    incidentMarker.bindPopup(`<b>Reporte Ciudadano: ${r.type}</b><br>${r.desc}<br><small>${r.loc} · ${r.time}</small>`);
+    fullMapIncidentMarkers.push(incidentMarker);
+  });
+}
+
+function centrarEnMapa(lat, lng) {
+  if (fullMapObj) {
+    fullMapObj.setView([lat, lng], 14);
+    NovaSound.playNotification();
+  }
+}
+
+/* ════════════════════════════════
+   REGISTRO (HU01)
+   ════════════════════════════════ */
+function selectProfile(profile) {
+  registerProfile = profile;
+  document.getElementById('sel-turista').classList.toggle('selected', profile === 'turista');
+  document.getElementById('sel-taxista').classList.toggle('selected', profile === 'taxista');
+  
+  const accentColor = profile === 'taxista' ? 'var(--taxista)' : 'var(--turista)';
+  document.documentElement.style.setProperty('--accent', accentColor);
+}
+
+function doRegister() {
+  let ok = true;
+  const nombre = document.getElementById('reg-nombre').value.trim();
+  const apellidos = document.getElementById('reg-apellidos').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const pass = document.getElementById('reg-pass').value;
+  const terms = document.getElementById('reg-terms').checked;
+
+  const errNombre = document.getElementById('err-nombre');
+  const errEmail = document.getElementById('err-email');
+  const errPass = document.getElementById('err-pass');
+  const errProfile = document.getElementById('err-profile');
+  const errTerms = document.getElementById('err-terms');
+
+  errNombre.style.display = nombre ? 'none' : 'block'; if(!nombre) ok=false;
+  errEmail.style.display = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? 'none' : 'block'; if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) ok=false;
+  errPass.style.display = pass.length>=8 ? 'none' : 'block'; if(pass.length<8) ok=false;
+  errProfile.style.display = registerProfile ? 'none' : 'block'; if(!registerProfile) ok=false;
+  errTerms.style.display = terms ? 'none' : 'block'; if(!terms) ok=false;
+
+  if(!ok) {
+    NovaSound.playAlert();
+    return;
+  }
+
+  // Guardar usuario en localStorage
+  const newUser = {
+    nombre: nombre,
+    apellidos: apellidos,
+    email: email,
+    pass: pass,
+    profile: registerProfile,
+    telefono: '+51 999 000 000'
+  };
+
+  const users = DB.getUsers();
+  const exists = users.some(u => u.email === email);
+  if(exists) {
+    showToast('⚠️ Este correo ya está registrado');
+    NovaSound.playAlert();
+    return;
+  }
+
+  DB.saveUser(newUser);
+  currentUser = newUser;
+  DB.saveSession(newUser);
+
+  NovaSound.playSuccess();
+  showToast('✅ Cuenta creada exitosamente');
+  setTimeout(() => enterApp(), 800);
+}
+
+/* ════════════════════════════════
+   LOGIN (HU02)
+   ════════════════════════════════ */
+let failedAttempts = 0;
+
+function loginSelectProfile(profile) {
+  loginProfile = profile;
+  document.getElementById('login-sel-turista').classList.toggle('selected', profile === 'turista');
+  document.getElementById('login-sel-taxista').classList.toggle('selected', profile === 'taxista');
+  
+  const accentColor = profile === 'taxista' ? 'var(--taxista)' : 'var(--turista)';
+  document.documentElement.style.setProperty('--accent', accentColor);
+}
+
+function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+
+  if(!email || !pass) {
+    showToast('⚠️ Ingresa tus credenciales');
+    NovaSound.playAlert();
+    return;
+  }
+
+  // Control de intentos fallidos
+  if (failedAttempts >= 5) {
+    showToast('❌ Acceso bloqueado. Intente más tarde.');
+    NovaSound.playSOS();
+    return;
+  }
+
+  const users = DB.getUsers();
+  // Validar credenciales
+  const user = users.find(u => u.email === email && u.pass === pass);
+
+  if (user) {
+    currentUser = user;
+    if (loginProfile && loginProfile !== user.profile) {
+      currentUser.profile = loginProfile;
+    }
+    DB.saveSession(currentUser);
+    document.documentElement.style.setProperty('--accent', currentUser.profile === 'taxista' ? 'var(--taxista)' : 'var(--turista)');
+    
+    NovaSound.playSuccess();
+    showToast('🔑 Acceso concedido. Bienvenido.');
+    failedAttempts = 0;
+    setTimeout(() => enterApp(), 600);
+  } else {
+    failedAttempts++;
+    NovaSound.playAlert();
+    showToast(`⚠️ Credenciales incorrectas. Intento ${failedAttempts}/5`);
+  }
+}
+
+/* ════════════════════════════════
+   DENTRO DE LA APP (DASHBOARD)
+   ════════════════════════════════ */
+function enterApp() {
+  const hora = new Date().getHours();
+  const saludo = hora < 12 ? 'Buenos días,' : hora < 18 ? 'Buenas tardes,' : 'Buenas noches,';
+  
+  const perfIcon = currentUser.profile === 'taxista' ? '🚕' : '🌎';
+  const perfName = currentUser.profile === 'taxista' ? 'Taxista Conductor' : 'Turista Explorador';
+
+  document.getElementById('home-greeting').textContent = saludo;
+  document.getElementById('home-name').textContent = currentUser.nombre;
+  document.getElementById('home-profile-badge').innerHTML = `${perfIcon} ${perfName}`;
+
+  // Cargar Perfil Screen
+  const initials = (currentUser.nombre || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  document.getElementById('profile-avatar-letter').textContent = initials;
+  document.getElementById('profile-display-name').textContent = `${currentUser.nombre} ${currentUser.apellidos || ''}`;
+  document.getElementById('profile-display-email').textContent = currentUser.email;
+  document.getElementById('profile-badge').innerHTML = `${perfIcon} ${perfName}`;
+  
+  document.getElementById('pf-nombre').textContent = currentUser.nombre;
+  document.getElementById('pf-email').textContent = currentUser.email;
+  document.getElementById('pf-telefono').textContent = currentUser.telefono || '+51 999 000 000';
+
+  // Mostrar u ocultar acceso administrativo
+  const adminEntry = document.getElementById('profile-admin-entry');
+  if (currentUser.profile === 'taxista' || currentUser.email.includes('admin') || currentUser.nombre.toLowerCase().includes('admin')) {
+    adminEntry.classList.remove('hidden');
+  } else {
+    adminEntry.classList.add('hidden');
+  }
+
+  // Renderizar Dashboard y accesos rápidos según el perfil
+  renderDashboardComponents();
+  
+  // Renderizar contactos
+  renderContacts();
+
+  // Renderizar reportes
+  renderReportsList();
+
+  // Renderizar verificaciones pendientes de Admin
+  renderAdminReportsModeration();
+
+  // Ir a Home
+  go('screen-home');
+}
+
+// Inyección dinámica de botones y alertas según perfil
+function renderDashboardComponents() {
+  const grid = document.getElementById('home-quick-grid');
+  const feed = document.getElementById('home-alert-feed-list');
+  grid.innerHTML = '';
+  feed.innerHTML = '';
+
+  if (currentUser.profile === 'taxista') {
+    grid.innerHTML = `
+      <div class="quick-btn" onclick="go('screen-ruta')">
+        <div class="quick-icon">🚕</div>
+        <div class="quick-title">Rutas de Tráfico</div>
+        <div class="quick-sub">Destinos limpios</div>
+      </div>
+      <div class="quick-btn" onclick="go('screen-mapa')">
+        <div class="quick-icon">🗺️</div>
+        <div class="quick-title">Zonas de Recogida</div>
+        <div class="quick-sub">Riesgo en tiempo real</div>
+      </div>
+      <div class="quick-btn" onclick="go('screen-reportes')">
+        <div class="quick-icon">🚨</div>
+        <div class="quick-title">Reportar Tráfico</div>
+        <div class="quick-sub">Congestión o Asalto</div>
+      </div>
+      <div class="quick-btn" onclick="go('screen-sos')">
+        <div class="quick-icon">🆘</div>
+        <div class="quick-title">Pánico SOS</div>
+        <div class="quick-sub">Centro de Control</div>
+      </div>
+    `;
+
+    feed.innerHTML = `
+      <div class="alert-item" onclick="go('screen-alertas')">
+        <div class="alert-icon">🚧</div>
+        <div class="alert-text">
+          <div class="alert-title">Congestión por asalto</div>
+          <div class="alert-meta">Av. Grau, La Victoria · Hace 5 min</div>
+        </div>
+        <span class="badge badge-danger">Alto</span>
+      </div>
+      <div class="alert-item" onclick="go('screen-alertas')">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-text">
+          <div class="alert-title">Modo Nocturno Sugerido</div>
+          <div class="alert-meta">Evita Jr. Huánuco después de las 20h</div>
+        </div>
+        <span class="badge badge-warn">Medio</span>
+      </div>
+    `;
+  } else {
+    grid.innerHTML = `
+      <div class="quick-btn" onclick="go('screen-ruta')">
+        <div class="quick-icon">🛡️</div>
+        <div class="quick-title">Ruta Segura</div>
+        <div class="quick-sub">Guía de prevención</div>
+      </div>
+      <div class="quick-btn" onclick="go('screen-alertas')">
+        <div class="quick-icon">🔔</div>
+        <div class="quick-title">Alertas Activas</div>
+        <div class="quick-sub">Perímetro seguro</div>
+      </div>
+      <div class="quick-btn" onclick="go('screen-reportes')">
+        <div class="quick-icon">📍</div>
+        <div class="quick-title">Reportar Alerta</div>
+        <div class="quick-sub">Incidente peatonal</div>
+      </div>
+      <div class="quick-btn" onclick="go('screen-sos')">
+        <div class="quick-icon">🆘</div>
+        <div class="quick-title">Auxilio SOS</div>
+        <div class="quick-sub">Alerta de Seguridad</div>
+      </div>
+    `;
+
+    feed.innerHTML = `
+      <div class="alert-item" onclick="go('screen-alertas')">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-text">
+          <div class="alert-title">Robo de celulares frecuente</div>
+          <div class="alert-meta">Paraderos Av. Tacna · Hace 10 min</div>
+        </div>
+        <span class="badge badge-danger">Alto</span>
+      </div>
+      <div class="alert-item" onclick="go('screen-alertas')">
+        <div class="alert-icon">🟢</div>
+        <div class="alert-text">
+          <div class="alert-title">Resguardo Policial Activo</div>
+          <div class="alert-meta">Centro Histórico · Todo el día</div>
+        </div>
+        <span class="badge badge-safe">Bajo</span>
+      </div>
+    `;
+  }
+}
+
+/* ════════════════════════════════
+   RECUPERAR CONTRASEÑA (HU03)
+   ════════════════════════════════ */
+function doRecover() {
+  const email = document.getElementById('rec-email').value.trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    showToast('⚠️ Ingresa un correo válido');
+    NovaSound.playAlert();
+    return;
+  }
+  document.getElementById('rec-success').classList.remove('hidden');
+  NovaSound.playSuccess();
+  showToast('📧 Enlace enviado. Válido por 15 min.');
+}
+
+function doResetPass() {
+  const p1 = document.getElementById('rec-new-pass').value;
+  const p2 = document.getElementById('rec-confirm-pass').value;
+  if(p1.length < 8){
+    showToast('⚠️ Contraseña mínimo de 8 caracteres');
+    NovaSound.playAlert();
+    return;
+  }
+  if(p1 !== p2){
+    showToast('⚠️ Las contraseñas no coinciden');
+    NovaSound.playAlert();
+    return;
+  }
+  showToast('✅ Contraseña actualizada');
+  NovaSound.playSuccess();
+  setTimeout(() => go('screen-login'), 1000);
+}
+
+/* ════════════════════════════════
+   MAPA FILTROS & BÚSQUEDA (HU05-07)
+   ════════════════════════════════ */
+function filtrarMapa(tipo, el) {
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+
+  if (!fullMapObj) return;
+
+  // Filtrar círculos de riesgo en el mapa Leaflet
+  fullMapRiskCircles.forEach(item => {
+    if (tipo === 'todo') {
+      item.circle.setStyle({ fillOpacity: 0.3, opacity: 1 });
+    } else if (tipo === 'noche' && item.hour === 'noche') {
+      item.circle.setStyle({ fillOpacity: 0.45, opacity: 1 });
+    } else if (tipo === 'dia' && item.hour === 'dia') {
+      item.circle.setStyle({ fillOpacity: 0.2, opacity: 0.8 });
+    } else if (tipo === 'alto' && item.risk === 'alto') {
+      item.circle.setStyle({ fillOpacity: 0.5, opacity: 1 });
+    } else if (tipo === 'bajo' && item.risk === 'bajo') {
+      item.circle.setStyle({ fillOpacity: 0.3, opacity: 1 });
+    } else {
+      item.circle.setStyle({ fillOpacity: 0, opacity: 0 }); // Oculto
+    }
+  });
+
+  NovaSound.playNotification();
+  showToast(`Filtro aplicado: ${tipo.toUpperCase()}`);
+}
+
+function buscarZona() {
+  const q = document.getElementById('zona-buscar').value.trim();
+  if(!q) return;
+
+  const resultBox = document.getElementById('zona-result');
+  const badge = document.getElementById('zona-badge');
+  const desc = document.getElementById('zona-desc');
+  resultBox.classList.remove('hidden');
+
+  const term = q.toLowerCase();
+  
+  // Buscar en nuestras zonas
+  const match = LIMA_ZONES.find(z => z.name.toLowerCase().includes(term));
+
+  if (match) {
+    if (match.risk === 'alto') {
+      badge.className = 'badge badge-danger';
+      badge.textContent = '🔴 Riesgo Alto';
+      desc.innerHTML = `La zona de <b>${match.name}</b> presenta alta criminalidad ahora. Evitar paraderos solitarios.`;
+      NovaSound.playDanger();
+    } else if (match.risk === 'medio') {
+      badge.className = 'badge badge-warn';
+      badge.textContent = '🟡 Riesgo Medio';
+      desc.innerHTML = `Precaución moderada en <b>${match.name}</b>. Transitar por calles iluminadas.`;
+      NovaSound.playAlert();
+    } else {
+      badge.className = 'badge badge-safe';
+      badge.textContent = '🟢 Seguro';
+      desc.innerHTML = `<b>${match.name}</b> es actualmente una zona segura y patrullada.`;
+      NovaSound.playSuccess();
+    }
+    centrarEnMapa(match.lat, match.lng);
+  } else {
+    badge.className = 'badge badge-warn';
+    badge.textContent = '⚪ Sin Datos';
+    desc.innerHTML = `No hay reportes recientes en "${q}". Mantén la precaución habitual.`;
+    NovaSound.playNotification();
+  }
+}
+
+/* ════════════════════════════════
+   RUTAS (HU08, HU09, HU10)
+   ════════════════════════════════ */
+let polylines = [];
+let routeMarkers = [];
+
+// Base de coordenadas de distritos de Lima como Fallback de geocodificación
+const DISTRICT_COORDS = {
+  "miraflores": [-12.122, -77.029],
+  "san isidro": [-12.096, -77.035],
+  "la victoria": [-12.075, -77.030],
+  "el agustino": [-12.045, -77.008],
+  "cercado de lima": [-12.056, -77.035],
+  "centro de lima": [-12.056, -77.035],
+  "breña": [-12.064, -77.052],
+  "surco": [-12.145, -77.012],
+  "santiago de surco": [-12.145, -77.012],
+  "san miguel": [-12.077, -77.094],
+  "magdalena": [-12.090, -77.070],
+  "lince": [-12.083, -77.030],
+  "jesus maria": [-12.075, -77.048],
+  "san borja": [-12.098, -77.003],
+  "ate": [-12.030, -76.920],
+  "chorrillos": [-12.162, -77.022],
+  "barranco": [-12.148, -77.021],
+  "la molina": [-12.078, -76.940]
+};
+
+// Geocodificador con fallback local
+async function geolocalizarAddress(address) {
+  const cleanAddr = address.toLowerCase().trim();
+  
+  // Buscar en fallback local primero
+  for (const district in DISTRICT_COORDS) {
+    if (cleanAddr.includes(district)) {
+      return DISTRICT_COORDS[district];
+    }
+  }
+
+  // Si no está en locales, intentar llamar a API Nominatim
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address + ", Lima, Peru")}`);
+    const data = await response.json();
+    if (data && data.length > 0) {
+      return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+    }
+  } catch (e) {
+    console.warn("Error con Nominatim geocode, usando fallback por defecto");
+  }
+
+  // Si falla todo, devolvemos un punto aleatorio en Lima centro para que no falle
+  return [-12.08 + (Math.random() * 0.05), -77.03 + (Math.random() * 0.05)];
+}
+
+// Obtener ruta OSRM con punto intermedio opcional
+async function calcularRutaOSRM(startLatLng, endLatLng, waypointLatLng = null) {
+  try {
+    let coordsStr = `${startLatLng[1]},${startLatLng[0]}`;
+    if (waypointLatLng) {
+      coordsStr += `;${waypointLatLng[1]},${waypointLatLng[0]}`;
+    }
+    coordsStr += `;${endLatLng[1]},${endLatLng[0]}`;
+
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data && data.routes && data.routes.length > 0) {
+      return data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+    }
+  } catch (e) {
+    console.warn("Error con OSRM routing", e);
+  }
+  return null;
+}
+
+// Genera una curva suave de Bézier entre dos puntos para fallback offline
+function generarCurvaBezier(pStart, pEnd, offsetLat, offsetLng) {
+  const points = [];
+  const pControl = [
+    (pStart[0] + pEnd[0]) / 2 + offsetLat,
+    (pStart[1] + pEnd[1]) / 2 + offsetLng
+  ];
+  
+  const steps = 15;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const lat = (1 - t) * (1 - t) * pStart[0] + 2 * (1 - t) * t * pControl[0] + t * t * pEnd[0];
+    const lng = (1 - t) * (1 - t) * pStart[1] + 2 * (1 - t) * t * pControl[1] + t * t * pEnd[1];
+    points.push([lat, lng]);
+  }
+  return points;
+}
+
+async function calcularRuta() {
+  const origText = document.getElementById('ruta-origen').value.trim();
+  const destText = document.getElementById('ruta-destino').value.trim();
+  
+  if(!destText) {
+    showToast('⚠️ Ingresa un destino');
+    NovaSound.playAlert();
+    return;
+  }
+
+  showToast('🗺️ Geolocalizando origen y destino...');
+  const startLatLng = await geolocalizarAddress(origText || "Miraflores");
+  const endLatLng = await geolocalizarAddress(destText);
+
+  document.getElementById('ruta-resultado').classList.remove('hidden');
+  NovaSound.playSuccess();
+  showToast('🛣️ Rutas dinámicas trazadas en el mapa');
+  
+  NovaVoice.speak("Rutas seguras y alternativas calculadas para tu destino.");
+
+  setTimeout(() => {
+    if (routeMapObj) {
+      routeMapObj.invalidateSize();
+      dibujarPolilineasRutaDinamicas(startLatLng, endLatLng);
+    }
+  }, 100);
+}
+
+async function dibujarPolilineasRutaDinamicas(startLatLng, endLatLng) {
+  if (!routeMapObj) return;
+
+  // Limpiar previas polilíneas y marcadores
+  polylines.forEach(p => routeMapObj.removeLayer(p));
+  polylines = [];
+  routeMarkers.forEach(m => routeMapObj.removeLayer(m));
+  routeMarkers = [];
+
+  // Calcular puntos intermedios para las alternativas dinámicas
+  const midLat = (startLatLng[0] + endLatLng[0]) / 2;
+  const midLng = (startLatLng[1] + endLatLng[1]) / 2;
+
+  const waypointSeguro = [midLat + 0.005, midLng - 0.006];
+  const waypointTransp = [midLat - 0.004, midLng + 0.003];
+  const waypointNocturna = [midLat + 0.002, midLng + 0.004];
+
+  // Ejecutar solicitudes de ruta en paralelo
+  showToast('🛣️ Trazando rutas transitables por calles...');
+  const [rapida, segura, transp, nocturna] = await Promise.all([
+    calcularRutaOSRM(startLatLng, endLatLng),
+    calcularRutaOSRM(startLatLng, endLatLng, waypointSeguro),
+    calcularRutaOSRM(startLatLng, endLatLng, waypointTransp),
+    calcularRutaOSRM(startLatLng, endLatLng, waypointNocturna)
+  ]);
+
+  let pathRapida = rapida;
+  let pathSegura = segura;
+  let pathTransp = transp;
+  let pathNocturna = nocturna;
+
+  // Fallback offline (Bézier suave)
+  if (!pathRapida) {
+    showToast('📶 Modo offline activo. Trazando desvíos suavizados.');
+    pathRapida = generarCurvaBezier(startLatLng, endLatLng, 0, 0);
+    pathSegura = generarCurvaBezier(startLatLng, endLatLng, 0.005, -0.006);
+    pathTransp = generarCurvaBezier(startLatLng, endLatLng, -0.004, 0.003);
+    pathNocturna = generarCurvaBezier(startLatLng, endLatLng, 0.002, 0.004);
+  }
+
+  // Dibujar en mapa
+  const polySegura = L.polyline(pathSegura, { color: '#06b6d4', weight: 5, opacity: 0.85 }).addTo(routeMapObj);
+  const polyRapida = L.polyline(pathRapida, { color: '#ef4444', weight: 4, opacity: 0.5, dashArray: '5, 8' }).addTo(routeMapObj);
+  const polyTransp = L.polyline(pathTransp, { color: '#f59e0b', weight: 4, opacity: 0.5 }).addTo(routeMapObj);
+  const polyNocturna = L.polyline(pathNocturna, { color: '#22c55e', weight: 4, opacity: 0.5 }).addTo(routeMapObj);
+
+  polylines.push(polySegura, polyRapida, polyTransp, polyNocturna);
+  
+  routeMapObj.fitBounds(polySegura.getBounds(), { padding: [30, 30] });
+
+  // Marcadores de origen y destino en mapa
+  const mStart = L.marker(startLatLng).addTo(routeMapObj).bindPopup("<b>Origen</b>");
+  const mEnd = L.marker(endLatLng).addTo(routeMapObj).bindPopup("<b>Destino</b>");
+  routeMarkers.push(mStart, mEnd);
+
+  // Puntos de apoyo dinámicos (cercanos al destino)
+  const pApoyoLatLng = [endLatLng[0] + 0.002, endLatLng[1] - 0.002];
+  const mApoyo = L.circleMarker(pApoyoLatLng, { color: '#22c55e', radius: 6 }).addTo(routeMapObj).bindPopup("Punto de Apoyo: Comisaría/Hospital Cercano");
+  routeMarkers.push(mApoyo);
+}
+
+function selectRoute(tipo) {
+  document.getElementById('opt-segura').classList.remove('selected');
+  document.getElementById('opt-rapida').classList.remove('selected');
+  document.getElementById('opt-transp').classList.remove('selected');
+  document.getElementById('opt-nocturna').classList.remove('selected');
+
+  document.getElementById('opt-' + tipo).classList.add('selected');
+
+  if (polylines.length >= 4) {
+    polylines[0].setStyle({ opacity: tipo === 'segura' ? 0.9 : 0.3, weight: tipo === 'segura' ? 6 : 4 });
+    polylines[1].setStyle({ opacity: tipo === 'rapida' ? 0.9 : 0.3, weight: tipo === 'rapida' ? 6 : 4 });
+    polylines[2].setStyle({ opacity: tipo === 'transp' ? 0.9 : 0.3, weight: tipo === 'transp' ? 6 : 4 });
+    polylines[3].setStyle({ opacity: tipo === 'nocturna' ? 0.9 : 0.3, weight: tipo === 'nocturna' ? 6 : 4 });
+  }
+
+  if (tipo === 'rapida') {
+    NovaSound.playAlert();
+    showToast('⚠️ Riesgo Alto. Pasa cerca de zonas críticas.');
+    NovaVoice.speak("Precaución. La ruta rápida cruza sectores con alta tasa de reportes por asalto.");
+  } else {
+    NovaSound.playNotification();
+    showToast(`Ruta ${tipo.toUpperCase()} seleccionada.`);
+  }
+}
+
+function iniciarNavegacion() {
+  NovaSound.playSuccess();
+  showToast('🧭 Guiado en tiempo real iniciado.');
+  NovaVoice.speak("Iniciando navegación guiada. Manténgase en la ruta recomendada.");
+}
+
+/* ════════════════════════════════
+   ALERTAS PREFERENCIAS (HU11-13)
+   ════════════════════════════════ */
+function syncPrefToggles() {
+  const prefs = DB.getPrefs();
+  document.getElementById('pref-preventiva').classList.toggle('on', prefs.preventiva);
+  document.getElementById('pref-voz').classList.toggle('on', prefs.voz);
+  document.getElementById('pref-vibra').classList.toggle('on', prefs.vibra);
+  document.getElementById('pref-noche').classList.toggle('on', prefs.noche);
+  document.getElementById('pref-nivel').value = prefs.nivel;
+}
+
+function togglePref(key) {
+  const prefs = DB.getPrefs();
+  prefs[key] = !prefs[key];
+  DB.savePrefs(prefs);
+
+  const el = document.getElementById('pref-' + key);
+  el.classList.toggle('on');
+
+  NovaSound.playNotification();
+  showToast(prefs[key] ? '🔔 Preferencia activada' : '🔕 Preferencia desactivada');
+}
+
+function changeNivelSensibilidad() {
+  const select = document.getElementById('pref-nivel');
+  const prefs = DB.getPrefs();
+  prefs.nivel = select.value;
+  DB.savePrefs(prefs);
+  showToast(`Sensibilidad: ${prefs.nivel}`);
+  NovaSound.playNotification();
+}
+
+/* ════════════════════════════════
+   REPORTES (HU14, HU15, HU16)
+   ════════════════════════════════ */
+let currentReportType = '';
+let attachedPhoto = false;
+
+function reportTab(btn, tabId) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+
+  document.getElementById('tab-nuevo').classList.toggle('hidden', tabId !== 'tab-nuevo');
+  document.getElementById('tab-cercanos').classList.toggle('hidden', tabId !== 'tab-cercanos');
+
+  if(tabId === 'tab-cercanos') {
+    renderReportsList();
+  }
+}
+
+function selectReportType(el, tipo) {
+  document.querySelectorAll('.report-type').forEach(r => r.classList.remove('selected'));
+  el.classList.add('selected');
+  currentReportType = tipo;
+  NovaSound.playNotification();
+}
+
+function triggerEvidenceUpload() {
+  attachedPhoto = true;
+  document.getElementById('evidence-upload-zone').style.borderColor = 'var(--safe)';
+  document.getElementById('evidence-status-label').innerHTML = '📸 <b>Foto_Incidente_392.jpg</b> adjuntado con éxito.';
+  NovaSound.playSuccess();
+  showToast('📷 Evidencia adjuntada correctamente (HU15)');
+}
+
+function enviarReporte() {
+  const desc = document.getElementById('rep-desc').value.trim();
+  const loc = document.getElementById('rep-loc').value.trim();
+
+  if(!currentReportType) {
+    showToast('⚠️ Selecciona el tipo de incidente');
+    NovaSound.playAlert();
+    return;
+  }
+
+  const newReport = {
+    id: Date.now(),
+    type: currentReportType,
+    desc: desc || `Reporte de ${currentReportType} en la vía pública.`,
+    loc: loc || '📍 Miraflores, Lima',
+    time: 'Ahora mismo',
+    status: 'pendiente'
+  };
+
+  DB.saveReport(newReport);
+
+  NovaSound.playSuccess();
+  showToast('📍 Reporte ciudadano enviado a moderación.');
+  NovaVoice.speak("Reporte enviado. Gracias por contribuir a la red NOVA.");
+
+  // Limpiar campos
+  document.getElementById('rep-desc').value = '';
+  document.querySelectorAll('.report-type').forEach(r => r.classList.remove('selected'));
+  currentReportType = '';
+  attachedPhoto = false;
+  document.getElementById('evidence-upload-zone').style.borderColor = 'var(--border)';
+  document.getElementById('evidence-status-label').textContent = 'Toca para adjuntar foto o video';
+
+  renderReportsList();
+  renderAdminReportsModeration();
+}
+
+function renderReportsList() {
+  const container = document.getElementById('nearby-reports-container');
+  container.innerHTML = '';
+
+  const reports = DB.getReports();
+  reports.forEach(r => {
+    const isRed = r.type === 'Robo' || r.type === 'Asalto';
+    const dotColor = isRed ? 'var(--danger)' : 'var(--warn)';
+    
+    const verifiedBadge = r.status === 'verificado' 
+      ? '<span class="verified-tag" style="background:rgba(34,197,94,0.15); color:var(--safe); border: 1px solid var(--safe);">✓ Verificado</span>' 
+      : '<span class="verified-tag" style="background:rgba(245,158,11,0.15); color:var(--warn); border: 1px solid var(--warn);">⚙ Pendiente</span>';
+
+    container.innerHTML += `
+      <div class="nearby-report">
+        <div class="report-dot" style="background:${dotColor};"></div>
+        <div style="flex:1;">
+          <div class="report-detail">${r.type} ${verifiedBadge}</div>
+          <div class="text-xs text-muted mt-4">${r.desc}</div>
+          <div class="report-meta" style="margin-top:6px;">${r.loc} · ${r.time}</div>
+        </div>
+      </div>
+    `;
+  });
+}
+
+/* ════════════════════════════════
+   EMERGENCIA SOS (HU17, HU18, HU19)
+   ════════════════════════════════ */
+function activarSOS() {
+  NovaSound.playSOS();
+  
+  document.getElementById('sos-main-btn').classList.add('active');
+  document.getElementById('sos-modal').classList.add('visible');
+
+  NovaVoice.speak("Alerta de emergencia activada. Enviando localización GPS y notificando a sus contactos.");
+  
+  const contacts = DB.getContacts();
+  if (contacts.length > 0) {
+    setTimeout(() => {
+      showToast(`✉️ SMS de auxilio enviado a: ${contacts.map(c=>c.name).join(', ')}`);
+    }, 1500);
+  }
+}
+
+function cerrarSOSModal() {
+  document.getElementById('sos-modal').classList.remove('visible');
+  document.getElementById('sos-main-btn').classList.remove('active');
+  showToast('✅ Situación controlada. Alerta desactivada.');
+  window.speechSynthesis.cancel();
+}
+
+// Contactos CRUD
+function renderContacts() {
+  const container = document.getElementById('contacts-container');
+  container.innerHTML = '';
+
+  const contacts = DB.getContacts();
+  contacts.forEach(c => {
+    container.innerHTML += `
+      <div class="contact-item">
+        <div class="contact-avatar">👤</div>
+        <div style="flex:1; text-align: left;">
+          <div class="contact-name">${c.name}</div>
+          <div class="contact-rel">${c.rel} · ${c.phone}</div>
+        </div>
+        <div class="contact-actions">
+          <button class="contact-btn" onclick="showToast('📞 Llamando a ${c.name}...')">📞</button>
+          <button class="contact-btn" style="color:var(--danger);" onclick="deleteContact(${c.id})">❌</button>
+        </div>
+      </div>
+    `;
+  });
+}
+
+function openAddContactModal() {
+  document.getElementById('add-contact-modal').classList.add('active');
+}
+
+function closeAddContactModal() {
+  document.getElementById('add-contact-modal').classList.remove('active');
+}
+
+function saveNewContact() {
+  const name = document.getElementById('contact-new-name').value.trim();
+  const rel = document.getElementById('contact-new-rel').value;
+  const phone = document.getElementById('contact-new-phone').value.trim();
+
+  if(!name || !phone) {
+    showToast('⚠️ Completa los campos requeridos');
+    NovaSound.playAlert();
+    return;
+  }
+
+  const contacts = DB.getContacts();
+  contacts.push({
+    id: Date.now(),
+    name: name,
+    rel: rel,
+    phone: phone
+  });
+
+  DB.saveContacts(contacts);
+  renderContacts();
+  closeAddContactModal();
+
+  document.getElementById('contact-new-name').value = '';
+  document.getElementById('contact-new-phone').value = '';
+
+  NovaSound.playSuccess();
+  showToast('✅ Contacto guardado correctamente');
+}
+
+function deleteContact(id) {
+  let contacts = DB.getContacts();
+  contacts = contacts.filter(c => c.id !== id);
+  DB.saveContacts(contacts);
+  renderContacts();
+  NovaSound.playNotification();
+  showToast('🗑️ Contacto eliminado');
+}
+
+/* ════════════════════════════════
+   PERFIL (HU04)
+   ════════════════════════════════ */
+function guardarPerfil() {
+  currentUser.nombre = document.getElementById('pf-nombre').textContent.trim();
+  currentUser.email = document.getElementById('pf-email').textContent.trim();
+  currentUser.telefono = document.getElementById('pf-telefono').textContent.trim();
+
+  const users = DB.getUsers();
+  const idx = users.findIndex(u => u.email === currentUser.email);
+  if (idx !== -1) {
+    users[idx] = currentUser;
+    localStorage.setItem('nova_users', JSON.stringify(users));
+  }
+
+  DB.saveSession(currentUser);
+
+  NovaSound.playSuccess();
+  showToast('✅ Datos de perfil actualizados.');
+  enterApp();
+}
+
+function cerrarSesion() {
+  DB.clearSession();
+  currentUser = null;
+  document.documentElement.style.setProperty('--accent', 'var(--turista)');
+  
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-pass').value = '';
+
+  go('screen-splash');
+}
+
+/* ════════════════════════════════
+   ADMIN - MODERACION DE REPORTES (HU20-22)
+   ════════════════════════════════ */
+function renderAdminReportsModeration() {
+  const container = document.getElementById('admin-reports-verification-list');
+  if(!container) return;
+
+  container.innerHTML = '';
+  const reports = DB.getReports();
+  const totalSpan = document.getElementById('admin-total-reports');
+  if(totalSpan) totalSpan.textContent = reports.length;
+
+  const pending = reports.filter(r => r.status === 'pendiente');
+
+  if (pending.length === 0) {
+    container.innerHTML = '<div class="text-xs text-muted" style="text-align:center; padding: 20px;">No hay reportes pendientes de moderación.</div>';
+    return;
+  }
+
+  pending.forEach(r => {
+    container.innerHTML += `
+      <div class="card mb-8" style="padding:12px;">
+        <div class="flex-between">
+          <div class="fw-600 text-sm">${r.type}</div>
+          <span class="badge badge-warn" style="font-size:.65rem;">Pendiente</span>
+        </div>
+        <div class="text-xs mt-4" style="color:var(--muted);">${r.desc}</div>
+        <div class="text-xs mt-4" style="font-style:italic;">📍 ${r.loc}</div>
+        <div class="flex-between mt-8" style="gap:10px;">
+          <button class="btn btn-safe" style="padding:6px; font-size:.75rem;" onclick="moderateReport(${r.id}, 'verificado')">Aprobar ✓</button>
+          <button class="btn btn-danger" style="padding:6px; font-size:.75rem;" onclick="moderateReport(${r.id}, 'descartado')">Rechazar ❌</button>
+        </div>
+      </div>
+    `;
+  });
+}
+
+function moderateReport(reportId, status) {
+  DB.updateReportStatus(reportId, status);
+  NovaSound.playSuccess();
+  showToast(status === 'verificado' ? '✅ Reporte aprobado' : '❌ Reporte descartado');
+  
+  renderAdminReportsModeration();
+  renderReportsList();
+  renderMapIncidentMarkers();
+}
+
+/* ════════════════════════════════
+   IA PREDICCIONES (HU26-28)
+   ════════════════════════════════ */
+const PREDICTIONS_DATA = {
+  morning: [
+    { zone: 'La Victoria', risk: 'Medio', prob: '45%', recommendation: 'Tránsito fluido. Atención moderada en paraderos de transporte público.' },
+    { zone: 'Cercado de Lima', risk: 'Bajo', prob: '18%', recommendation: 'Zonas despejadas y patrullaje municipal continuo.' },
+    { zone: 'El Agustino', risk: 'Alto', prob: '78%', recommendation: 'Evitar accesos a paraderos solitarios. Se aconseja viajar en grupo.' }
+  ],
+  afternoon: [
+    { zone: 'La Victoria', risk: 'Alto', prob: '82%', recommendation: 'Cruce Av. Aviación crítico por aglomeraciones. Alto riesgo de robo de celulares.' },
+    { zone: 'Cercado de Lima', risk: 'Medio', prob: '50%', recommendation: 'Precaución en zonas comerciales del centro histórico.' },
+    { zone: 'El Agustino', risk: 'Alto', prob: '75%', recommendation: 'Zonas periféricas con menor visibilidad policial.' }
+  ],
+  night: [
+    { zone: 'La Victoria', risk: 'Crítico', prob: '94%', recommendation: 'Evasión total aconsejada. Utilice la Ruta Nocturna iluminada del sistema NOVA.' },
+    { zone: 'Cercado de Lima', risk: 'Alto', prob: '80%', recommendation: 'Permanecer en avenidas principales iluminadas.' },
+    { zone: 'Miraflores', risk: 'Bajo', prob: '12%', recommendation: 'Seguro para transitar. Serenazgo patrullando.' }
+  ]
+};
+
+function changePredTime(time, el) {
+  document.querySelectorAll('#screen-predicciones .nav-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+
+  renderPredictions(time);
+  NovaSound.playNotification();
+}
+
+function renderPredictions(time) {
+  const container = document.getElementById('predictions-results-container');
+  container.innerHTML = '';
+
+  const data = PREDICTIONS_DATA[time] || [];
+  data.forEach(p => {
+    const isCrit = p.risk === 'Crítico' || p.risk === 'Alto';
+    const barColor = isCrit ? 'var(--danger)' : p.risk === 'Medio' ? 'var(--warn)' : 'var(--safe)';
+
+    container.innerHTML += `
+      <div class="pred-card">
+        <div class="flex-between mb-8">
+          <div class="fw-700 text-sm">${p.zone}</div>
+          <span class="badge" style="background:${barColor}15; color:${barColor}; border:1px solid ${barColor}50;">
+            ${p.risk} (${p.prob})
+          </span>
+        </div>
+        <div class="text-xs text-muted mb-8">${p.recommendation}</div>
+        <div class="label" style="font-size:.6rem; margin-bottom: 4px;">Confianza de la IA:</div>
+        <div style="background:rgba(255,255,255,0.06); height:6px; border-radius:3px; overflow:hidden;">
+          <div style="background:${barColor}; width:${p.prob}; height:100%;"></div>
+        </div>
+      </div>
+    `;
+  });
+}
+
+// Inicializar predicciones con 'morning' por defecto
+setTimeout(() => {
+  renderPredictions('morning');
+}, 500);
+
+/* ════════════════════════════════
+   TOAST GLOBAL
+   ════════════════════════════════ */
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
